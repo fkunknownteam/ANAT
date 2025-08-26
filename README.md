@@ -25,6 +25,9 @@ Follow these steps to install and run ANAT on Termux:
 # Update and upgrade packages
 apt update && apt upgrade
 
+# install termux-api
+pkg install-api
+
 # Install Python
 pkg install python
 
