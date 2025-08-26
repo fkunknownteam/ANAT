@@ -39,7 +39,7 @@ git clone https://github.com/fkunknownteam/ANAT
 cd ANAT
 
 # Install required Python packages
-pip install -r requenst.txt
+pip install -r requirements.txt
 
 # Run ANAT
 python ANAT.py
