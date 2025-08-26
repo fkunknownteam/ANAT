@@ -9,17 +9,83 @@ import time
 import requests
 import json
 from colorama import Fore, Style, init
-import psutil
 import platform
 import os
 import pyfiglet
+import speedtest
+from colorama import Fore, Style
+import re
 
 # Initialize colorama for cross-platform colored output
 init()
 
+def simple_distance_estimate(rssi):
+    if rssi >= -50:
+        return "1–2 meters (Very close)"
+    elif rssi >= -60:
+        return "2–4 meters"
+    elif rssi >= -70:
+        return "4–8 meters"
+    elif rssi >= -80:
+        return "8–15 meters"
+    else:
+        return "15+ meters (Weak or far)"
+
+def get_wifi_info():
+    try:
+        result = subprocess.run(
+            ['termux-wifi-connectioninfo'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        if result.returncode != 0:
+            print("Error running termux-wifi-connectioninfo. Make sure Termux:API is installed.")
+            return None
+        
+        data = json.loads(result.stdout)
+        return data
+
+    except Exception as e:
+        print("Error getting WiFi info:", e)
+        return None
+
+def ping_router():
+    print("Pinging router at 192.168.55.1...\n")
+    try:
+        result = subprocess.run(
+            ['ping', '-c', '10', '192.168.55.1'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        output = result.stdout
+        match = re.search(r'rtt min/avg/max/mdev = ([\d\.]+)/([\d\.]+)/([\d\.]+)/([\d\.]+)', output)
+        if match:
+            avg_ping = float(match.group(2))
+           
+            if avg_ping < 5:
+                status = f"{Fore.GREEN}Excellent{Style.RESET_ALL}"
+            elif avg_ping < 15:
+                status = f"{Fore.CYAN}Good{Style.RESET_ALL}"
+            elif avg_ping < 30:
+                status = f"{Fore.YELLOW}Average{Style.RESET_ALL}"
+            else:
+                status = f"{Fore.RED}Poor or Unstable{Style.RESET_ALL}"
+
+            print(f"{Fore.YELLOW} \n=== Ping Report ==={Style.RESET_ALL}")
+            
+            print(f"Average Ping Time: {avg_ping} ms")
+            print(f"Connection Status: {status}")
+        else:
+            print("Could not parse ping results.")
+
+    except Exception as e:
+        print("An error occurred during ping:", e)
+
 # Define package speeds (in MBps)
 PACKAGE_SPEED_MBPS = 1  # Example package speed, adjust as needed
-
+os.system("clear")
 def print_logo():
     # Define ANSI escape codes for colors
     cyan = "\033[36m"
@@ -120,23 +186,91 @@ def speed_test():
     except Exception as e:
         print(f"{Fore.RED}Speed test failed: {str(e)}{Style.RESET_ALL}")
         return None, None
+ 
+# raw speed check 
+def measure_download_speed(duration=20):
+    
+    url = "https://download.c.realme.com/flash/Rollbackpack/realme_Narzo_50/oplus_ota_downgrade.zip" 
+    chunk_size = 1024 * 64
+    max_speed_MBps = 0 
+
+    try:
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+
+        print(f"{Fore.YELLOW} \nTry to enhance and find out your packages ({duration} seconds)...{Style.RESET_ALL}")
+
+
+        start_time = time.time()
+        last_time = start_time
+        last_downloaded = 0
+        total_downloaded = 0
+
+        for chunk in response.iter_content(chunk_size=chunk_size):
+            if not chunk:
+                continue
+
+            total_downloaded += len(chunk)
+            now = time.time()
+            elapsed = now - last_time
+            total_elapsed = now - start_time
+
+            if elapsed >= 1:
+                downloaded = total_downloaded - last_downloaded
+                instant_speed = downloaded / elapsed / (1024 * 1024)  # Convert to MBps
+                avg_speed = total_downloaded / total_elapsed / (1024 * 1024)  # MBps
+                if instant_speed > max_speed_MBps:
+                    max_speed_MBps = instant_speed
+
+                last_time = now
+                last_downloaded = total_downloaded
+
+            if total_elapsed >= duration:
+                break
+
+        # Print only the highest download speed encountered
+        print(f"Your package is likely nearby :{max_speed_MBps * 8:.2f} Mbps 😎")
+
+    except requests.exceptions.RequestException as e:
+        print(f"\nError during download: {e}")
+    except Exception as e:
+        print(f"\nUnexpected error: {e}")
 
 def bdix_speed_test():
-    """Perform a BDIX speed test."""
+    """Perform a BDIX speed test using Speedtest CLI with BDIX servers."""
     try:
-        url = "http://bdix.net/speedtest/random4000x4000.jpg"
-        start_time = time.time()
-        response = requests.get(url, timeout=10)
-        end_time = time.time()
+        st = speedtest.Speedtest()
+        st.get_servers()
+        all_servers = st.get_servers()
+       
+        bdix_server = None
+        for server_list in all_servers.values():
+            for server in server_list:
+                if 'bdix' in server['sponsor'].lower() or 'bangladesh' in server['country'].lower():
+                    bdix_server = server
+                    break
+            if bdix_server:
+                break
+
+        if not bdix_server:
+            print(f"{Fore.YELLOW}No BDIX server found. Using best available server.{Style.RESET_ALL}")
+            st.get_best_server()
+        else:
+            print(f"{Fore.GREEN}Using BDIX Server: {bdix_server['sponsor']} - {bdix_server['name']}{Style.RESET_ALL}")
+            st.get_best_server([bdix_server])
         
-        file_size = len(response.content) / 1_000_000  # Size in MB
-        duration = end_time - start_time
-        speed_MBps = file_size / duration
+        download = st.download() / 1_000_000  # Mbps
+        upload = st.upload() / 1_000_000  # Mbps
+
+        print(f"{Fore.CYAN}Download Speed: {download:.2f} Mbps{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}Upload Speed: {upload:.2f} Mbps{Style.RESET_ALL}")
         
-        return speed_MBps
+        return download  # Or return both if needed
+
     except Exception as e:
         print(f"{Fore.RED}BDIX speed test failed: {str(e)}{Style.RESET_ALL}")
         return None
+
 
 def ping_test(host):
     """Perform a ping test to the specified host."""
@@ -167,16 +301,33 @@ def print_speed_comparison(download_speed, upload_speed):
         color = Fore.RED
     print(f"Download speed: {download_speed:.2f} MBps")
     print(f"Upload speed: {upload_speed:.2f} MBps")
-    print(f"{color}Total speed: Your package may be closer to {total_speed:.2f} Mbps {Style.RESET_ALL}")
+    print(f"{color}Total speed: Your package may be closer to {total_speed:.2f} Mbps 😬{Style.RESET_ALL}")
 
-def get_network_usage():
-    """Get current network usage."""
-    net_io = psutil.net_io_counters()
-    return net_io.bytes_sent, net_io.bytes_recv
+import subprocess
+import json
+from colorama import Fore, Style, init
+
+init(autoreset=True)
+
+def get_current_connection():
+    """Fetch current Wi-Fi connection info (BSSID and frequency)."""
+    try:
+        output = subprocess.check_output(["termux-wifi-connectioninfo"], universal_newlines=True)
+        return json.loads(output)
+    except Exception as e:
+        print(f"{Fore.RED}Failed to get current connection: {e}{Style.RESET_ALL}")
+        return None
+
 
 def analyze_wifi_channels_termux():
-    """Analyze Wi-Fi channels using termux-wifi-scaninfo command."""
+    """Analyze Wi-Fi channels using termux-wifi-scaninfo command.""" 
     try:
+        # Get current connection info
+        current_output = subprocess.check_output(["termux-wifi-connectioninfo"], universal_newlines=True)
+        current_data = json.loads(current_output)
+        current_bssid = current_data.get("bssid")
+
+        # Scan available networks
         output = subprocess.check_output(["termux-wifi-scaninfo"], universal_newlines=True)
         wifi_data = json.loads(output)
         
@@ -200,8 +351,8 @@ def analyze_wifi_channels_termux():
                 channels[channel] = []
             channels[channel].append((ssid, bssid, rssi))
             
-            # Identify the current network (strongest signal)
-            if current_network is None or rssi > current_network[2]:
+            # Match with current network using BSSID
+            if bssid == current_bssid:
                 current_network = (ssid, channel, rssi)
         
         return channels, current_network
@@ -269,6 +420,7 @@ def suggest_best_channel(channels, current_network):
     print("4. If possible, use the 5 GHz band for less interference and higher speeds.")
     print("5. Regularly check for new devices on your network and remove any unauthorized ones.")
 
+
 def detect_network_problems(download_speed, upload_speed, ping, devices):
     """Detect potential network problems and provide tips."""
     problems = []
@@ -306,13 +458,7 @@ def detect_network_problems(download_speed, upload_speed, ping, devices):
     if len(devices) > 10:
         problems.append("High number of connected devices")
         tips.append("Consider upgrading your router or implementing QoS settings")
-    
-    # Check for potential bandwidth saturation
-    sent, recv = get_network_usage()
-    if sent > 1000000 or recv > 1000000:  # More than 1 MB/s
-        problems.append("High current network usage")
-        tips.append("Check for bandwidth-intensive applications or background processes")
-
+   
     return problems, tips
 
 def print_analysis_results(problems, tips):
@@ -346,6 +492,51 @@ def print_analysis_results(problems, tips):
     ]
     for i, tip in enumerate(general_tips, 1):
         print(f"{Fore.YELLOW}{i}. {tip}{Style.RESET_ALL}")
+        
+  
+#Ping Test to Router 
+        
+def ping_router():
+    local_ip, netmask = get_network_info()
+    if not local_ip or not netmask:
+        print(f"{Fore.RED}Could not detect network information automatically.{Style.RESET_ALL}")
+        return
+  
+    network_range = get_network_range(local_ip, netmask)
+    wifi_info = get_wifi_info()
+    router_ip = network_range.split('/')[0][:-1] + '1' 
+    print(f"Pinging router at {router_ip}...\n")
+    try:
+        result = subprocess.run(
+        ['ping', '-c', '10', router_ip], 
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+        )
+
+        output = result.stdout
+        match = re.search(r'rtt min/avg/max/mdev = ([\d\.]+)/([\d\.]+)/([\d\.]+)/([\d\.]+)', output)
+        if match:
+            avg_ping = float(match.group(2))
+           
+            if avg_ping < 5:
+                status = f"{Fore.GREEN}Excellent{Style.RESET_ALL}"
+            elif avg_ping < 15:
+                status = f"{Fore.CYAN}Good{Style.RESET_ALL}"
+            elif avg_ping < 30:
+                status = f"{Fore.YELLOW}Average{Style.RESET_ALL}"
+            else:
+                status = f"{Fore.RED}Poor or Unstable{Style.RESET_ALL}"
+
+            print(f"{Fore.YELLOW} \n=== Ping Report ==={Style.RESET_ALL}")
+            
+            print(f"Average Ping Time: {avg_ping} ms")
+            print(f"Connection Status: {status}")
+        else:
+            print("Could not parse ping results.")
+
+    except Exception as e:
+        print("An error occurred during ping:", e)
 
 def main():
     print_logo()
@@ -355,13 +546,33 @@ def main():
     if not local_ip or not netmask:
         print(f"{Fore.RED}Could not detect network information automatically.{Style.RESET_ALL}")
         return
-    
+  
     network_range = get_network_range(local_ip, netmask)
-    router_ip = network_range.split('/')[0][:-1] + '1'  # Assume router is at x.x.x.1
+    wifi_info = get_wifi_info()
+    router_ip = network_range.split('/')[0][:-1] + '1' 
+    
     print(f"\n{Fore.CYAN}=== Router Information ==={Style.RESET_ALL}")
-    print(f"Local IP: {local_ip}")
-    print(f"Subnet Mask: {netmask}")
-    print(f"Network Range: {network_range}")
+    print(f"{Fore.YELLOW}Local IP        : {Fore.GREEN}{local_ip}")
+    print(f"{Fore.YELLOW}Subnet Mask     : {Fore.GREEN}{netmask}")
+    print(f"{Fore.YELLOW}Network Range   : {Fore.GREEN}{network_range}")
+    print(f"{Fore.YELLOW}Assumed Gateway : {Fore.GREEN}{router_ip}")
+    
+    if wifi_info:
+        
+        print(f"{Fore.YELLOW}SSID            : {Fore.GREEN}{wifi_info.get('ssid', 'Unknown')}")
+        print(f"{Fore.YELLOW}BSSID           : {Fore.GREEN}{wifi_info.get('bssid', 'Unknown')}")
+        rssi = wifi_info.get('rssi')
+        if rssi is not None:
+            print(f"{Fore.YELLOW}RSSI            : {Fore.GREEN}{rssi} dBm")
+            print(f"{Fore.YELLOW}Estimated Dist. : {Fore.GREEN}{simple_distance_estimate(rssi)}")
+        else:
+            print(f"{Fore.RED}RSSI data not available.{Style.RESET_ALL}")
+    else:
+        print(f"{Fore.RED}Could not retrieve WiFi information.{Style.RESET_ALL}")
+    
+    print()
+    ping_router()
+
     
     # 1. Scan for connected devices
     print(f"\n{Fore.YELLOW}Scanning network {network_range}...{Style.RESET_ALL}")
@@ -379,6 +590,7 @@ def main():
     print(f"\n{Fore.YELLOW}Performing speed test...{Style.RESET_ALL}")
     download_MBps, upload_MBps = speed_test()
     print_speed_comparison(download_MBps, upload_MBps)
+    measure_download_speed() 
     
     print(f"\n{Fore.YELLOW}Performing BDIX speed test...{Style.RESET_ALL}")
     bdix_MBps = bdix_speed_test()
@@ -387,7 +599,7 @@ def main():
     
     # 3. Ping Test
     print(f"\n{Fore.YELLOW}Performing ping tests...{Style.RESET_ALL}")
-    hosts_to_ping = ["google.com", "facebook.com", "youtube.com","instagram.com","messenger.com","tiktok.com","us.ff.garena.com"," bdix.net"]
+    hosts_to_ping = ["google.com", "facebook.com", "youtube.com","instagram.com","messenger.com","tiktok.com","ff.garena.com"," 9.9.9.9"]
     avg_ping = 0
     ping_count = 0
     for host in hosts_to_ping:
