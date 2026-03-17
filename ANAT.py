@@ -94,6 +94,7 @@ CHUNK         = 131_072      # 128 KB read chunks
 # (display_name, url_or_template, warmup_needed)
 # URLs with {size} are Cloudflare-style; others are verified public CDN test files.
 DOWNLOAD_SOURCES = [
+    ("Cloudflare",        "https://speed.cloudflare.com/__down?bytes={size}", False),
     ("TEL2",         "http://speedtest.tele2.net/10MB.zip",               False),
     ("FSN1 ",    "https://fsn1-speed.hetzner.com/100MB.bin",  True),
     ("Github",      "https://github.com/szalony9szymek/large/releases/download/free/large",        False),
