@@ -49,7 +49,7 @@ except ImportError:
     HAS_SPEEDTEST = False
 
 try:
-    import requests as _requests  # noqa: F401  (kept for future use)
+    import requests as _requests  # noqa: F401  (reserved for future use)
     HAS_REQUESTS = True
 except ImportError:
     HAS_REQUESTS = False
@@ -101,34 +101,34 @@ RESULTS: dict = {
 DOWNLOAD_SIZE = 25_000_000   # bytes per stream
 UPLOAD_SIZE   = 10_000_000   # bytes per stream
 NUM_STREAMS   = 4
-WARMUP_SIZE   = 1_000_000    # bytes, Cloudflare warm-up only
+WARMUP_SIZE   = 1_000_000    # bytes, for some servers
 CHUNK         = 131_072      # 128 KB read chunks
 
 # Download servers — tried in order, stop at first success.
-# (display_name, url_or_template, warmup_needed)
-# URLs with {size} are Cloudflare-style; others are direct test files/CDNs.
+# (display_name, url, warmup_needed)
 DOWNLOAD_SOURCES = [
-    ("Cloudflare",        "https://speed.cloudflare.com/__down?bytes={size}", False),
-    ("Tele2-10MB",        "http://speedtest.tele2.net/10MB.zip",              False),
-    ("Tele2-50MB",        "http://speedtest.tele2.net/50MB.zip",              False),
-    ("Tele2-100MB",       "http://speedtest.tele2.net/100MB.zip",             False),
+    # Cloudflare removed as requested
 
-    ("Hetzner-FSN1-100MB","https://fsn1-speed.hetzner.com/100MB.bin",         True),
-    ("Hetzner-NBG1-100MB","https://nbg1-speed.hetzner.com/100MB.bin",         True),
-    ("Hetzner-HEL1-100MB","https://hel1-speed.hetzner.com/100MB.bin",         True),
-    ("Hetzner-SIN-100MB", "https://sin-speed.hetzner.com/100MB.bin",          True),
+    ("Tele2-10MB",          "http://speedtest.tele2.net/10MB.zip",                False),
+    ("Tele2-50MB",          "http://speedtest.tele2.net/50MB.zip",                False),
+    ("Tele2-100MB",         "http://speedtest.tele2.net/100MB.zip",               False),
 
-    ("OVH-FR-10MB",       "http://proof.ovh.net/files/10Mb.dat",              False),
-    ("OVH-FR-100MB",      "http://proof.ovh.net/files/100Mb.dat",             False),
+    ("Hetzner-FSN1-100MB",  "https://fsn1-speed.hetzner.com/100MB.bin",           True),
+    ("Hetzner-NBG1-100MB",  "https://nbg1-speed.hetzner.com/100MB.bin",           True),
+    ("Hetzner-HEL1-100MB",  "https://hel1-speed.hetzner.com/100MB.bin",           True),
+    ("Hetzner-SIN-100MB",   "https://sin-speed.hetzner.com/100MB.bin",            True),
 
-    ("LeaseWeb-NL-100MB", "https://mirror.leaseweb.com/speedtest/100mb.bin",  False),
-    ("LeaseWeb-US-100MB", "https://mirror.us.leaseweb.net/speedtest/100mb.bin", False),
+    ("OVH-FR-10MB",         "http://proof.ovh.net/files/10Mb.dat",                False),
+    ("OVH-FR-100MB",        "http://proof.ovh.net/files/100Mb.dat",               False),
 
-    ("ThinkBroadband-50MB","https://ipv4.download.thinkbroadband.com/50MB.zip", False),
+    ("LeaseWeb-NL-100MB",   "https://mirror.leaseweb.com/speedtest/100mb.bin",    False),
+    ("LeaseWeb-US-100MB",   "https://mirror.us.leaseweb.net/speedtest/100mb.bin", False),
+
+    ("ThinkBroadband-50MB", "https://ipv4.download.thinkbroadband.com/50MB.zip",  False),
     ("ThinkBroadband-100MB","https://ipv4.download.thinkbroadband.com/100MB.zip", False),
 
-    ("Github-large",      "https://github.com/szalony9szymek/large/releases/download/free/large", False),
-    ("Realme-Rollback",   "https://download.c.realme.com/flash/Rollbackpack/realme_Narzo_50/oplus_ota_downgrade.zip", False),
+    ("Github-large",        "https://github.com/szalony9szymek/large/releases/download/free/large", False),
+    ("Realme-Rollback",     "https://download.c.realme.com/flash/Rollbackpack/realme_Narzo_50/oplus_ota_downgrade.zip", False),
 ]
 
 # Upload endpoints — tried in order on failure / rate-limit
@@ -335,7 +335,6 @@ def get_wifi_info():
 # =============================================================================
 
 def get_hostname(ip: str):
-    # Correct reverse lookup: IP → hostname
     try:
         hostname = socket.gethostbyaddr(ip)[0]
         return hostname if hostname != ip else None
@@ -691,63 +690,74 @@ def _measure_ping_http(attempts: int = 10) -> float | None:
 def _measure_download(streams: int = NUM_STREAMS, size: int = DOWNLOAD_SIZE) -> tuple:
     """
     Try each server in DOWNLOAD_SOURCES.
+    Each server is retried a few times before moving to the next.
     Returns (Mbps: float, server_name: str) or (None, error_summary: str).
     """
     all_errors = []
+    MAX_RETRIES_PER_SERVER = 3
 
-    for name, template, do_warmup in DOWNLOAD_SOURCES:
-        url = template.format(size=size) if "{size}" in template else template
-
-        # Optional warm-up
-        if do_warmup and "{size}" in template:
+    for name, url, do_warmup in DOWNLOAD_SOURCES:
+        # Optional warm-up for some servers (simple HEAD-like read)
+        if do_warmup:
             try:
-                wu = template.format(size=WARMUP_SIZE)
-                with _cf_req(wu, timeout=12) as r:
-                    while r.read(CHUNK):
-                        pass
+                with _cf_req(url, timeout=12) as r:
+                    r.read(min(CHUNK, 4096))
             except Exception:
-                pass   # non-fatal
+                pass   # warmup failure is non-fatal
 
-        # Canary stream (stream 0 alone)
-        can_res = [0.0]
-        can_err: dict = {}
-        ct = threading.Thread(
-            target=_download_stream,
-            args=(url, can_res, 0, can_err),
-            daemon=True,
-        )
-        ct.start()
-        ct.join(timeout=20)
+        server_ok = False
+        last_err  = ""
 
-        if 0 in can_err:
-            all_errors.append(f"{name}: {can_err[0]}")
-            continue
-
-        if can_res[0] == 0:
-            all_errors.append(f"{name}: canary returned no usable data")
-            continue
-
-        # Remaining parallel streams
-        rest_res = [0.0] * (streams - 1)
-        rest_err: dict = {}
-        rts = [
-            threading.Thread(
+        for attempt in range(1, MAX_RETRIES_PER_SERVER + 1):
+            # Canary stream
+            can_res = [0.0]
+            can_err: dict = {}
+            ct = threading.Thread(
                 target=_download_stream,
-                args=(url, rest_res, i, rest_err),
+                args=(url, can_res, 0, can_err),
                 daemon=True,
             )
-            for i in range(streams - 1)
-        ]
-        for t in rts:
-            t.start()
-        for t in rts:
-            t.join()
+            ct.start()
+            ct.join(timeout=20)
 
-        total_bps = can_res[0] + sum(rest_res)
-        if total_bps > 0:
-            return (total_bps * 8) / 1_000_000, name   # Mbps
+            if 0 in can_err:
+                last_err = can_err[0]
+                if _is_rate_limited(last_err):
+                    time.sleep(2 * attempt)
+                continue
 
-        all_errors.append(f"{name}: all parallel streams returned 0")
+            if can_res[0] == 0:
+                last_err = "canary returned no usable data"
+                time.sleep(1 * attempt)
+                continue
+
+            # Remaining parallel streams
+            rest_res = [0.0] * (streams - 1)
+            rest_err: dict = {}
+            rts = [
+                threading.Thread(
+                    target=_download_stream,
+                    args=(url, rest_res, i, rest_err),
+                    daemon=True,
+                )
+                for i in range(streams - 1)
+            ]
+            for t in rts:
+                t.start()
+            for t in rts:
+                t.join()
+
+            total_bps = can_res[0] + sum(rest_res)
+            if total_bps > 0:
+                server_ok = True
+                mbps = (total_bps * 8) / 1_000_000
+                return mbps, name
+
+            last_err = "all parallel streams returned 0"
+            time.sleep(1 * attempt)
+
+        if not server_ok:
+            all_errors.append(f"{name}: {last_err}")
 
     return None, " | ".join(all_errors) or "All servers failed"
 
@@ -787,7 +797,7 @@ def speed_test() -> tuple[float, float, float]:
     print(f"  {_DIM}Streams : {NUM_STREAMS} parallel TCP connections{_RESET}")
     print(
         f"  {_DIM}Download: {len(DOWNLOAD_SOURCES)} servers, "
-        f"stops at first success{_RESET}"
+        f"retries each then falls back{_RESET}"
     )
     print(
         f"  {_DIM}Upload  : {UPLOAD_SIZE // 1_000_000} MB × "
@@ -809,7 +819,7 @@ def speed_test() -> tuple[float, float, float]:
 
     # Download
     t = _spin_start(
-        f"Download — canary + {NUM_STREAMS} streams, auto-fallback on errors..."
+        f"Download — canary + {NUM_STREAMS} streams, retries/auto-fallback..."
     )
     dl_mbps, dl_info = _measure_download()
     _spin_stop(t)
