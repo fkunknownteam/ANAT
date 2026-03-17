@@ -93,15 +93,7 @@ CHUNK         = 131_072      # 128 KB read chunks
 # Download servers — tried in order, stops at first success.
 # (display_name, url_or_template, warmup_needed)
 # URLs with {size} are Cloudflare-style; others are verified public CDN test files.
-DOWNLOAD_SOURCES = [
-    ("Cloudflare",        "https://speed.cloudflare.com/__down?bytes={size}", False),
-    ("TEL2",         "http://speedtest.tele2.net/10MB.zip",               False),
-    ("FSN1 ",    "https://fsn1-speed.hetzner.com/100MB.bin",  True),
-    ("Github",      "https://github.com/szalony9szymek/large/releases/download/free/large",        False),
-    ("Realme",      "https://download.c.realme.com/flash/Rollbackpack/realme_Narzo_50/oplus_ota_downgrade.zip",            False),
-    ("SIN",         "https://sin-speed.hetzner.com/100MB.bin",                  False),
-    ("OVH FR",            "http://proof.ovh.net/files/10Mb.dat",               False),
-]
+DOWNLOAD_SOURCES = "https://download.c.realme.com/flash/Rollbackpack/realme_Narzo_50/oplus_ota_downgrade.zip" 
 
 # Upload endpoints — tried in order on failure / rate-limit
 UPLOAD_ENDPOINTS = [
@@ -682,11 +674,10 @@ def _measure_upload(streams: int = NUM_STREAMS, size: int = UPLOAD_SIZE) -> tupl
 
 
 def speed_test() -> tuple[float, float, float]:
-    print(f"\n{_BOLD}{_CYAN}=== Wi-Fi Speed Test (Auto-Fallback) ==={_RESET}")
-    print(f"  {_DIM}Streams : {NUM_STREAMS} parallel TCP connections{_RESET}")
-    print(f"  {_DIM}Download: {len(DOWNLOAD_SOURCES)} servers, stops at first success{_RESET}")
-    print(f"  {_DIM}Upload  : {UPLOAD_SIZE // 1_000_000} MB × {NUM_STREAMS} streams{_RESET}\n")
-
+    print(f"\n{_BOLD}{_CYAN}=== Wi-Fi Speed Test (Auto-Fallback) ==={_RESET}  "
+          f"{_DIM}Streams: {NUM_STREAMS} parallel TCP connections | "
+          f"Download: {len(DOWNLOAD_SOURCES)} servers, stops at first success | "
+          f"Upload: {UPLOAD_SIZE // 1_000_000} MB × {NUM_STREAMS} streams{_RESET}\n")
     # ── Ping ─────────────────────────────────────────────────────────────────
     t       = _spin_start("Measuring ping (10 samples, trimmed median)...")
     ping_ms = _measure_ping_http()
