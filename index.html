@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wi-Fi Diagnostic Report</title>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            /* Professional Color Palette */
+            --primary: #2563eb;       /* Royal Blue */
+            --primary-dark: #1e40af;
+            --secondary: #0ea5e9;     /* Sky Blue */
+            --success: #059669;       /* Emerald */
+            --success-bg: #d1fae5;
+            --warning: #d97706;       /* Amber */
+            --danger: #dc2626;        /* Red */
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-800: #1f2937;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-print-color-adjust: exact; /* Ensures colors print correctly */
+            print-color-adjust: exact;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #eef2f6;
+            color: var(--gray-800);
+            line-height: 1.5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        /* --- ICONS (SVG Styling) --- */
+        .icon {
+            width: 1em;
+            height: 1em;
+            vertical-align: -0.125em;
+            fill: currentColor;
+            display: inline-block;
+        }
+
+        /* --- CONTROLS (Floating Buttons) --- */
+        .controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s;
+        }
+
+        .btn-primary { background: linear-gradient(135deg, var(--secondary), var(--primary)); color: white; }
+        .btn-success { background: linear-gradient(135deg, #34d399, #059669); color: white; }
+        
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        .btn:active { transform: translateY(0); }
+
+        /* --- A4 SHEET LAYOUT --- */
+        .sheet-container {
+            margin-top: 40px;
+            margin-bottom: 40px;
+            transform-origin: top center; /* For scaling on small screens */
+        }
+
+        .a4-page {
+            width: 210mm;
+            min-height: 297mm;
+            background: white;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+            padding: 15mm;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- HEADER --- */
+        header {
+            background: linear-gradient(90deg, var(--secondary), var(--primary));
+            padding: 25px;
+            color: white;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        header h1 {
+            font-size: 26px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 0;
+            font-weight: 800;
+        }
+
+        header .icon { width: 32px; height: 32px; }
+
+        /* --- META DATA BAR --- */
+        .meta-bar {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 2px solid var(--gray-100);
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+            font-size: 13px;
+            color: #6b7280;
+        }
+
+        .meta-item { display: flex; align-items: center; gap: 8px; }
+        .meta-item .icon { color: var(--secondary); }
+
+        /* --- GRID LAYOUT --- */
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: 10px;
+            padding: 18px;
+            page-break-inside: avoid;
+        }
+
+        .card.full-width { grid-column: 1 / -1; }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--primary-dark);
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--gray-100);
+        }
+        
+        .card-header .icon { color: var(--secondary); font-size: 18px; }
+
+        /* --- DATA ROWS --- */
+        .row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            padding: 7px 0;
+            border-bottom: 1px solid var(--gray-50);
+        }
+        .row:last-child { border-bottom: none; }
+
+        .label { color: #6b7280; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+        .label .icon { color: #9ca3af; font-size: 12px; }
+        
+        /* Editable fields */
+        .value { 
+            font-weight: 600; 
+            color: var(--gray-800); 
+            text-align: right;
+            border-bottom: 1px dashed transparent;
+            transition: all 0.2s;
+        }
+        .value[contenteditable="true"]:hover {
+            background-color: #f0f9ff;
+            border-bottom-color: var(--secondary);
+            cursor: text;
+        }
+        .value:focus { outline: none; background: #e0f2fe; }
+
+        /* --- SPEED TEST SECTION --- */
+        .speed-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            text-align: center;
+        }
+
+        .metric-box {
+            background: var(--gray-50);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--gray-200);
+        }
+
+        .metric-title { font-size: 12px; color: #6b7280; text-transform: uppercase; font-weight: 600; }
+        .metric-val { 
+            font-size: 26px; 
+            font-weight: 800; 
+            color: var(--primary-dark); 
+            margin: 8px 0;
+            display: block;
+        }
+        .metric-unit { font-size: 11px; color: #9ca3af; }
+
+        /* --- VISUALIZATIONS --- */
+        .badge {
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .badge.good { background: var(--success-bg); color: var(--success); }
+        .badge.neutral { background: #f3f4f6; color: #4b5563; }
+
+        .signal-meter {
+            height: 8px;
+            background: var(--gray-200);
+            border-radius: 4px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        .signal-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #34d399, var(--primary));
+            width: 92%; /* Dynamic width */
+        }
+
+        /* --- FOOTER --- */
+        footer {
+            margin-top: auto;
+            border-top: 1px solid var(--gray-200);
+            padding-top: 15px;
+            text-align: center;
+            font-size: 11px;
+            color: #9ca3af;
+        }
+
+        /* --- PRINT & RESPONSIVE --- */
+        @media print {
+            body { background: white; padding: 0; display: block; }
+            .controls { display: none !important; }
+            .sheet-container { margin: 0; transform: none !important; }
+            .a4-page { box-shadow: none; margin: 0; width: 100%; height: 100%; page-break-after: always; }
+        }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed; top: 80px; right: 20px;
+            background: white; padding: 15px 20px;
+            border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            border-left: 5px solid var(--success);
+            display: flex; align-items: center; gap: 12px;
+            transform: translateX(200%); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 2000;
+        }
+        .toast.show { transform: translateX(0); }
+    </style>
+</head>
+<body>
+
+    <svg style="display: none;">
+        <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M12.01 21.49L23.64 7c-.45-.34-4.93-4-11.64-4C5.28 3 .81 6.66.36 7l11.63 14.49.01.01.01-.01z"/></symbol>
+        <symbol id="i-router" viewBox="0 0 24 24"><path d="M19 13h-2V9h-2v4H5c-1.1 0-2 .9-2 2v4c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-4c0-1.1-.9-2-2-2zM8 18H6v-2h2v2zm3.5 0h-2v-2h2v2zm3.5 0h-2v-2h2v2zM12 3C5.37 3 0 8.37 0 15h2c0-5.52 4.48-10 10-10s10 4.48 10 10h2c0-6.63-5.37-12-12-12z"/></symbol>
+        <symbol id="i-laptop" viewBox="0 0 24 24"><path d="M20 18c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z"/></symbol>
+        <symbol id="i-signal" viewBox="0 0 24 24"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></symbol>
+        <symbol id="i-speed" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.21 1.74-5.23-7.51 3.21-1.74 5.23z"/></symbol>
+        <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 13h2.28l1.65-5.29L9.5 15.6l2.35-7.58L14.7 13H21v2h-7.7l-1.92-6.31-2.58 8.16L6.2 10.19 5.24 15H3z"/></symbol>
+        <symbol id="i-user" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></symbol>
+        <symbol id="i-date" viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z"/></symbol>
+        <symbol id="i-print" viewBox="0 0 24 24"><path d="M19 8h-1V3H6v5H5c-1.66 0-3 1.34-3 3v6h3v4h14v-4h3v-6c0-1.66-1.34-3-3-3zM8 5h8v3H8V5zm8 12v2H8v-2h8zm2-2v-2H6v2H4v-4c0-.55.45-1 1-1h14c.55 0 1 .45 1 1v4h-2z"/></symbol>
+        <symbol id="i-download" viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></symbol>
+    </svg>
+
+    <div class="controls">
+        <button class="btn btn-success" id="printBtn">
+            <svg class="icon"><use href="#i-print"/></svg> Print Report
+        </button>
+        <button class="btn btn-primary" id="saveBtn">
+            <svg class="icon"><use href="#i-download"/></svg> Save as Image
+        </button>
+    </div>
+
+    <div class="sheet-container" id="sheetWrapper">
+        <main class="a4-page" id="report">
+            
+            <header>
+                <svg class="icon"><use href="#i-wifi"/></svg>
+                <h1>Wi-Fi Diagnostic Report</h1>
+            </header>
+
+            <div class="meta-bar">
+                <div class="meta-item">
+                    <span><i class="fas fa-calendar-alt"></i> Generated: <strong class="value" id="dateStr">Loading...</strong></span>
+                </div>
+                <div class="meta-item">
+                    <span><i class="fas fa-sync-alt"></i> API updated: <strong class="value" id="apiUpdatedStr">--</strong></span>
+                </div>
+                <div class="meta-item">
+                    <span><i class="fas fa-user"></i> User: <strong class="value">System Admin</strong></span>
+                </div>
+            </div>
+
+            <div class="grid">
+                <section class="card">
+                    <div class="card-header">
+                        <svg class="icon"><use href="#i-router"/></svg> Connection Details
+                    </div>
+                    <div class="row">
+                        <div class="label"> <i class="fas fa-network-wired"></i>Local IP</div>
+                        <div class="value" id="localIpVal">Loading...</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fas fa-sitemap"></i>Subnet Mask</div>
+                        <div class="value" id="subnetMaskVal">Loading...</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fas fa-arrows-alt-h"></i>Network Range</div>
+                        <div class="value" id="networkRangeVal">Loading...</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fas fa-door-open"></i>Assumed Gateway</div>
+                        <div class="value" id="gatewayVal">Loading...</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fas fa-wifi"></i>SSID</div>
+                        <div class="value" id="ssidVal">Loading...</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fas fa-id-badge"></i>BSSID</div>
+                        <div class="value" id="bssidVal">Loading...</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fas fa-chart-line"></i>RSSI</div>
+                        <div class="value" id="rssiVal">Loading...</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fas fa-map-marker-alt"></i>Estimated Dist.</div>
+                        <div class="value" id="estimatedDistVal">Loading...</div>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <div class="card-header">
+                        <svg class="icon"><use href="#i-router"/></svg> Router Details
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fa-solid fa-broadcast-tower"></i> Router Ping</div>
+                        <div class="value" id="router-ping">0 ms</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fa-solid fa-circle-check"></i> Connection Status</div>
+                        <span class="badge good" id="connection-status">Online</span>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fa-solid fa-list-ol"></i> Channel</div>
+                        <div class="value" id="channel">Auto</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fa-solid fa-arrows-left-right-to-line"></i> Channel Width</div>
+                        <div class="value" id="bandwidth">-- MHz</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fa-solid fa-gauge-high"></i> Link Speed</div>
+                        <div class="value" id="link_speed">-- Mbps</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fa-solid fa-network-wired"></i> Connected Devices</div>
+                        <div class="value" id="router-devices">0</div>
+                    </div>
+                </section>
+                
+                <section class="card">
+                    <div class="card-header">
+                        <svg class="icon"><use href="#i-laptop"/></svg> Performing Ping Tests
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fas fa-tower-cell"></i> Local ISP</div>
+                        <div class="value" id="ping-isp">-- / -- / --</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fas fa-globe-asia"></i> BDIX</div>
+                        <div class="value" id="ping-bdix">-- / -- / --</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fas fa-cloud"></i> Cloudflare</div>
+                        <div class="value" id="ping-cloudflare">-- / -- / --</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fas fa-users"></i> Meta</div>
+                        <div class="value" id="ping-meta">-- / -- / --</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fas fa-flag"></i> Singapore</div>
+                        <div class="value" id="ping-singapore">-- / -- / --</div>
+                    </div>
+                </section>
+
+
+                <section class="card">
+                    <div class="card-header">
+                        <svg class="icon"><use href="#i-pulse"/></svg> Network Health
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fas fa-exchange-alt"></i>Gateway Ping</div>
+                        <div class="value" id="gatewayPingVal">Loading...</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fas fa-clock"></i>Internet Latency (Google DNS)</div>
+                        <div class="value" id="internetLatencyVal">Loading...</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fas fa-chart-pie"></i>Packet Loss</div>
+                        <span class="badge good" id="packetLossVal">0.0%</span>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fas fa-wave-square"></i>Jitter</div>
+                        <div class="value" id="jitterVal">N/A</div>
+                    </div>
+                    <div class="row">
+                        <div class="label"><i class="fas fa-clone"></i>Duplicates</div>
+                        <div class="value" id="duplicatesVal">0</div>
+                    </div>
+                </section>
+
+                <section class="card full-width">
+                    <div class="card-header">
+                        <svg class="icon"><use href="#i-speed"/></svg> Speed Analysis
+                    </div>
+                    <div class="speed-metrics">
+                        <div class="metric-box">
+                            <div class="metric-title">Download</div>
+                            <span class="metric-val" id="downloadMbpsVal">--</span>
+                            <div class="metric-unit">Mbps</div>
+                        </div>
+                        <div class="metric-box">
+                            <div class="metric-title">Upload</div>
+                            <span class="metric-val" id="uploadMbpsVal">--</span>
+                            <div class="metric-unit">Mbps</div>
+                        </div>
+                        <div class="metric-box">
+                            <div class="metric-title">BDIX</div>
+                            <span class="metric-val" id="bdixMbpsVal">--</span>
+                            <div class="metric-unit">Mbps</div>
+                        </div>
+                    </div>
+                    <div class="row" style="margin-top: 15px; border-top: 1px dashed #e5e7eb; padding-top: 12px;">
+                        <div class="label">Efficiency Rating</div>
+                        <div class="value" id="efficiencyVal" style="color: var(--success);">Calculating...</div>
+                    </div>
+                </section>
+            </div>
+
+            <footer>
+                <p>Report ID: <span contenteditable="true">WIFI-DIAG-001</span> • Generated by : Advanced Network Analysis Tool</p>
+                <p style="margin-top: 5px;">System Note: Produced by the Advanced Network Analysis Tool from live device and router communication. Values are measured, not generated..</p>
+            </footer>
+        </main>
+    </div>
+
+    <div class="toast" id="toast">
+        <svg class="icon" style="color: var(--success); width: 20px; height: 20px;"><use href="#i-check"/></svg>
+        <span id="toastMsg">Report Saved!</span>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // 1. Set Date
+            document.getElementById('dateStr').textContent = new Date().toLocaleString();
+
+            // 2. Responsive Scaling Logic
+            const wrapper = document.getElementById('sheetWrapper');
+            function fitToScreen() {
+                const sheetWidth = 794; // A4 width in px @ 96dpi
+                const margin = 40;
+                const windowWidth = window.innerWidth;
+
+                if (windowWidth < (sheetWidth + margin)) {
+                    const scale = (windowWidth - margin) / sheetWidth;
+                    wrapper.style.transform = `scale(${scale})`;
+                    // Adjust height to avoid huge empty scroll space
+                    wrapper.style.height = `${(1123 * scale) + 50}px`;
+                } else {
+                    wrapper.style.transform = 'none';
+                    wrapper.style.height = 'auto';
+                }
+            }
+            window.addEventListener('resize', fitToScreen);
+            fitToScreen();
+
+            // 3. Print
+            document.getElementById('printBtn').onclick = () => window.print();
+
+            // 4. Save Image
+            document.getElementById('saveBtn').onclick = async () => {
+                const toast = document.getElementById('toast');
+                const toastMsg = document.getElementById('toastMsg');
+                const report = document.getElementById('report');
+
+                // User Feedback
+                toastMsg.textContent = "Generating Image...";
+                toast.classList.add('show');
+
+                try {
+                    // Temporarily reset transform for clean capture
+                    const prevTransform = wrapper.style.transform;
+                    wrapper.style.transform = 'none';
+                    window.scrollTo(0,0);
+
+                    const canvas = await html2canvas(report, {
+                        scale: 2, // High DPI
+                        useCORS: true,
+                        backgroundColor: '#ffffff'
+                    });
+
+                    // Restore view
+                    wrapper.style.transform = prevTransform;
+                    fitToScreen();
+
+                    // Download
+                    const link = document.createElement('a');
+                    link.download = `WiFi-Report-${Date.now()}.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+
+                    toastMsg.textContent = "Saved to Downloads!";
+                    setTimeout(() => toast.classList.remove('show'), 3000);
+                } catch (e) {
+                    console.error(e);
+                    toastMsg.textContent = "Error Saving";
+                    setTimeout(() => toast.classList.remove('show'), 3000);
+                }
+            };
+
+            // 5. Live data (from local Python service)
+            const setText = (id, value) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.textContent = (value === null || value === undefined || value === "") ? "N/A" : String(value);
+            };
+
+            const fmtMs = (v) => {
+                if (v === null || v === undefined) return null;
+                const n = Number(v);
+                if (!Number.isFinite(n)) return null;
+                return `${n.toFixed(2)} ms`;
+            };
+
+            const fmtMbps = (v) => {
+                if (v === null || v === undefined) return "--";
+                const n = Number(v);
+                if (!Number.isFinite(n)) return "--";
+                return n.toFixed(2);
+            };
+
+            // Simple distance estimate used when only RSSI is available
+            function estimateDistance(rssi) {
+                if (rssi == null) return "Unknown";
+                const n = Number(rssi);
+                if (!Number.isFinite(n)) return "Unknown";
+                if (n >= -50) return "1–2 meters (Very close)";
+                if (n >= -60) return "2–4 meters";
+                if (n >= -70) return "4–8 meters";
+                if (n >= -80) return "8–15 meters";
+                return "15+ meters (Weak or far)";
+            }
+
+            async function refresh() {
+                try {
+                    let res;
+
+                    // Prefer live API from ANAT.py when served via its local server
+                    try {
+                        res = await fetch(`/api/results?_=${Date.now()}`, { cache: "no-store" });
+                    } catch (e) {
+                        res = null;
+                    }
+
+                    // Fallback: read JSON snapshot written next to this HTML (anat_results.json)
+                    if (!res || !res.ok) {
+                        try {
+                            res = await fetch(`anat_results.json?_=${Date.now()}`, { cache: "no-store" });
+                        } catch (e) {
+                            res = null;
+                        }
+                    }
+
+                    if (!res || !res.ok) return;
+                    const data = await res.json();
+
+                    // Meta: report generated once, API updated time from backend
+                    const dateStrEl = document.getElementById("dateStr");
+                    if (dateStrEl && !dateStrEl.dataset.set) {
+                        dateStrEl.textContent = new Date().toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+                        dateStrEl.dataset.set = "1";
+                    }
+                    const apiUpdatedEl = document.getElementById("apiUpdatedStr");
+                    if (apiUpdatedEl && data?.updated_at != null) {
+                        const t = typeof data.updated_at === "number" ? data.updated_at * 1000 : new Date(data.updated_at).getTime();
+                        apiUpdatedEl.textContent = new Date(t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium" });
+                    }
+
+                    // Connection
+                    setText("localIpVal", data?.connection?.local_ip);
+                    setText("subnetMaskVal", data?.connection?.netmask);
+                    setText("networkRangeVal", data?.connection?.network_range);
+                    setText("gatewayVal", data?.connection?.gateway);
+
+                    // Wi-Fi: prefer wifi_analysis (from ANAT) when present, else wifi
+                    const wa = data?.wifi_analysis;
+                    const wifi = data?.wifi;
+                    const ssid = wa?.ssid ?? wifi?.ssid;
+                    const rssiNum = wa?.rssi ?? (wifi?.rssi != null ? wifi.rssi : null);
+                    const rssiText = rssiNum != null ? `${rssiNum} dBm` : (wifi?.rssi_text ?? null);
+                    const estimatedDist = rssiNum != null ? estimateDistance(rssiNum) : (wifi?.estimated_distance ?? null);
+                    setText("ssidVal", ssid);
+                    setText("bssidVal", wifi?.bssid);
+                    setText("rssiVal", rssiText);
+                    setText("estimatedDistVal", estimatedDist);
+                    setText("signalStrengthVal", rssiText);
+
+                    const fill = document.getElementById("signalFill");
+                    let pct = Number(wifi?.signal_percent);
+                    if (pct == null || !Number.isFinite(pct)) {
+                        if (rssiNum != null) pct = Math.max(0, Math.min(100, (rssiNum + 100) * 2));
+                    }
+                    if (fill && Number.isFinite(pct)) {
+                        fill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+                    }
+
+                    // Router details
+                    setText("router-ping", fmtMs(data?.router?.ping_ms ?? data?.health?.gateway_ping_ms));
+                    const statusEl = document.getElementById("connection-status");
+                    if (statusEl) {
+                        const status = data?.router?.status || "Unknown";
+                        statusEl.textContent = status;
+                    }
+                    setText("channel", wa?.channel ?? "Auto");
+                    setText("bandwidth", wa?.bandwidth != null ? `${wa.bandwidth} MHz` : "-- MHz");
+                    setText("link_speed", wa?.link_speed ?? "-- Mbps");
+                    setText("router-devices", data?.devices?.count ?? "0");
+                    setText("router-throughput", fmtMbps(data?.speed?.download_mbps));
+
+                    // Health (gateway + Google DNS)
+                    setText("gatewayPingVal", fmtMs(data?.health?.gateway?.avg_ms ?? data?.health?.gateway_ping_ms));
+                    setText("internetLatencyVal", fmtMs(data?.health?.internet?.avg_ms ?? data?.health?.internet_latency_ms));
+
+                    const loss = data?.health?.internet?.loss_pct;
+                    const packetLossEl = document.getElementById("packetLossVal");
+                    if (packetLossEl) {
+                        packetLossEl.textContent = (loss == null) ? "N/A" : `${loss.toFixed(1)}%`;
+                    }
+                    setText("jitterVal", fmtMs(data?.health?.internet?.jitter_ms));
+                    const dup = data?.health?.internet?.duplicates;
+                    setText("duplicatesVal", dup == null ? 0 : dup);
+
+                    // Speeds
+                    setText("downloadMbpsVal", fmtMbps(data?.speed?.download_mbps));
+                    setText("uploadMbpsVal", fmtMbps(data?.speed?.upload_mbps));
+                    setText("bdixMbpsVal", fmtMbps(data?.speed?.bdix_mbps));
+
+                    // ===============================
+                    // Enterprise Efficiency Rating
+                    // ===============================
+                    function calculateEfficiency(data) {
+                        const expectedMax = 100; // change per package
+                    
+                        const down = Number(data?.speed?.download_mbps);
+                        const loss = Number(data?.health?.internet?.loss_pct);
+                        const jitter = Number(data?.health?.internet?.jitter_ms);
+                        const latency = Number(data?.health?.internet?.avg_ms ?? data?.health?.internet_latency_ms);
+                    
+                        let score = 100;
+                    
+                        // ---- SPEED (major factor)
+                        if (Number.isFinite(down) && expectedMax > 0) {
+                            const speedPercent = (down / expectedMax) * 100;
+                            if (speedPercent < 100) score -= (100 - speedPercent) * 0.6;
+                        }
+                    
+                        // ---- PACKET LOSS (very serious)
+                        if (Number.isFinite(loss)) score -= loss * 5;
+                    
+                        // ---- JITTER
+                        if (Number.isFinite(jitter) && jitter > 5) score -= (jitter - 5) * 1.5;
+                    
+                        // ---- LATENCY
+                        if (Number.isFinite(latency) && latency > 20) score -= (latency - 20) * 0.3;
+                    
+                        return Math.max(0, Math.min(100, score));
+                    }
+                    
+                    const efficiency = calculateEfficiency(data);
+                    
+                    // Grade
+                    let label = "Poor";
+                    if (efficiency >= 95) label = "Excellent";
+                    else if (efficiency >= 85) label = "Very Good";
+                    else if (efficiency >= 70) label = "Good";
+                    else if (efficiency >= 50) label = "Fair";
+                    
+                    setText("efficiencyVal", `${efficiency.toFixed(1)}% (${label})`);
+
+
+                    // Performing ping tests summary (min / avg / max)
+                    const p = data?.health?.pings || {};
+                    const fmtPingTriplet = (stats) => {
+                        if (!stats || stats.avg_ms == null) return "-- / -- / --";
+                        const min = fmtMs(stats.min_ms) || "N/A";
+                        const avg = fmtMs(stats.avg_ms) || "N/A";
+                        const max = fmtMs(stats.max_ms) || "N/A";
+                        return `${min} / ${avg} / ${max}`;
+                    };
+                    setText("ping-isp", fmtPingTriplet(p.local_isp));
+                    setText("ping-bdix", fmtPingTriplet(p.bdix));
+                    setText("ping-cloudflare", fmtPingTriplet(p.cloudflare));
+                    setText("ping-meta", fmtPingTriplet(p.meta));
+                    setText("ping-singapore", fmtPingTriplet(p.singapore));
+                } catch (e) {
+                    // ignore transient errors while the python service is starting
+                }
+            }
+
+            refresh();
+            setInterval(refresh, 1500);
+        });
+    </script>
+</body>
+</html>
+ 
