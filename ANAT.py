@@ -90,7 +90,9 @@ NUM_STREAMS   = 4
 WARMUP_SIZE   = 1_000_000    # bytes, Cloudflare warm-up only
 CHUNK         = 131_072      # 128 KB read chunks
 
-
+# Download servers — tried in order, stops at first success.
+# (display_name, url_or_template, warmup_needed)
+# URLs with {size} are Cloudflare-style; others are verified public CDN test files.
 DOWNLOAD_SOURCES = [
     ("TEL2",         "http://speedtest.tele2.net/10MB.zip",               False),
     ("FSN1 ",    "https://fsn1-speed.hetzner.com/100MB.bin",  True),
@@ -280,7 +282,9 @@ def get_wifi_info() -> dict | None:
 # =============================================================================
 
 def get_hostname(ip: str) -> str | None:
-    
+    # BUGFIX-08: was socket.gethostbyname_ex() which does FORWARD lookup.
+    # Must use socket.gethostbyaddr() for REVERSE (IP → hostname) lookup.
+    try:
         hostname = socket.gethostbyaddr(ip)[0]
         return hostname if hostname != ip else None
     except Exception:
