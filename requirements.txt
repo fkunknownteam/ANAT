@@ -1,7 +1,6 @@
 colorama
 speedtest-cli
 requests
-psutil
 pyfiglet
 netifaces
 termux-api
