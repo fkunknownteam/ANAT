@@ -41,7 +41,7 @@ Run it once and it automatically produces a complete network report — no confi
 | Device | Android Version | Status |
 |---|---|---|
 | Realme Narzo 50 | Android 13 | Working |
-| Vivo V12 | Android 14 | Working |
+| Samsung Galaxy S20 5G | Android 13 | Working | 
 | Samsung Galaxy S5 | Android 6 | Working |
 
 ---
