@@ -36,6 +36,16 @@ Run it once and it automatically produces a complete network report — no confi
 
 ---
 
+## Tested Devices
+
+| Device | Android Version | Status |
+|---|---|---|
+| Realme Narzo 50 | Android 13 | Working |
+| Vivo V12 | Android 14 | Working |
+| Samsung Galaxy S5 | Android 6 | Working |
+
+---
+
 ## Requirements
 
 - Android phone running **Termux** (install from F-Droid, not Play Store)
