@@ -59,6 +59,8 @@ apt update && apt upgrade -y
 
 pkg install termux-api python git -y
 
+termux-location
+
 git clone https://github.com/fkunknownteam/ANAT
 
 cd ANAT
