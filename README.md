@@ -42,7 +42,7 @@ Run it once and it automatically produces a complete network report — no confi
 |---|---|---|
 | Realme Narzo 50 | Android 13 | Working |
 | Samsung Galaxy S20 5G | Android 13 | Working | 
-| Samsung Galaxy S5 | Android 6 | Working |
+| Xperia 1 III | Android 11 | Working |
 
 ---
 
