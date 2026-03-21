@@ -102,6 +102,9 @@ git clone https://github.com/fkunknownteam/ANAT
 # Enter the folder
 cd ANAT
 
+# allow
+chmod +x ANAT.py
+
 # Install optional Python packages
 pip install -r requirements.txt
 
