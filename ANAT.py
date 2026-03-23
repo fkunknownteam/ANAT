@@ -2,6 +2,8 @@
 # tool by : Golu Molu
 # team    : Fk Unknown Team
 
+
+
 import socket
 import subprocess
 import ipaddress
@@ -29,11 +31,9 @@ try:
 except ImportError:
     class _Fore:
         RED = GREEN = YELLOW = CYAN = MAGENTA = WHITE = BLUE = ""
-
     class _Style:
         RESET_ALL = BRIGHT = DIM = ""
-
-    Fore = _Fore()
+    Fore  = _Fore()
     Style = _Style()
 
 try:
@@ -49,7 +49,7 @@ except ImportError:
     HAS_SPEEDTEST = False
 
 try:
-    import requests as _requests  # noqa: F401  (reserved for future use)
+    import requests as _requests
     HAS_REQUESTS = True
 except ImportError:
     HAS_REQUESTS = False
@@ -98,28 +98,22 @@ RESULTS: dict = {
 # Speed-test configuration
 # =============================================================================
 
-DOWNLOAD_DURATION = 30          # seconds — timed download window
-UPLOAD_SIZE       = 10_000_000  # bytes per stream
+DOWNLOAD_DURATION = 30
+UPLOAD_SIZE       = 10_000_000
 NUM_STREAMS       = 4
-CHUNK             = 131_072     # 128 KB read chunks
+CHUNK             = 131_072
 
-# Download servers — tried in order, stop at first success.
-# Using URLs that truly stream large payloads without redirect/cache tricks.
 DOWNLOAD_SOURCES = [
-    # Cloudflare speed test endpoint — streams exactly N bytes, no caching
     ("Cloudflare",      "https://speed.cloudflare.com/__down?bytes=104857600"),
-    # Fast.com Netflix CDN — large payload, reliable
     ("Github-large",    "https://github.com/szalony9szymek/large/releases/download/free/large"),
     ("Realme-Rollback", "https://download.c.realme.com/flash/Rollbackpack/realme_Narzo_50/oplus_ota_downgrade.zip"),
 ]
 
-# Upload endpoints — tried in order on failure / rate-limit
 UPLOAD_ENDPOINTS = [
     ("Cloudflare", "https://speed.cloudflare.com/__up"),
     ("httpbin",    "https://httpbin.org/post"),
 ]
 
-# Ping targets — tried in order, uses first that responds >= 3 samples
 PING_TARGETS = [
     ("Cloudflare",     "https://speed.cloudflare.com/__down?bytes=0"),
     ("Google",         "https://www.google.com"),
@@ -133,6 +127,17 @@ PING_TARGETS = [
 def _clear_screen():
     try:
         os.system("cls" if platform.system().lower() == "windows" else "clear")
+    except Exception:
+        pass
+
+
+def _termux_request_location_once():
+    try:
+        subprocess.run(
+            ["termux-location", "-p", "network", "-r", "once"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            text=True, timeout=8,
+        )
     except Exception:
         pass
 
@@ -200,7 +205,6 @@ def print_logo():
 # =============================================================================
 
 def get_network_info():
-    """Return (local_ip, netmask). Uses netifaces if available, else socket fallback."""
     if HAS_NETIFACES:
         for iface in _netifaces.interfaces():
             addrs = _netifaces.ifaddresses(iface)
@@ -210,7 +214,6 @@ def get_network_info():
                 nm   = info.get("netmask", "")
                 if ip and not ip.startswith("127."):
                     return ip, nm
-    # Fallback via socket
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
@@ -245,9 +248,7 @@ def get_wifi_info():
     try:
         r = subprocess.run(
             ["termux-wifi-connectioninfo"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         if r.returncode == 0 and r.stdout.strip():
             return json.loads(r.stdout)
@@ -259,8 +260,7 @@ def get_wifi_info():
         try:
             out = subprocess.check_output(
                 ["netsh", "wlan", "show", "interfaces"],
-                stderr=subprocess.STDOUT,
-                universal_newlines=True,
+                stderr=subprocess.STDOUT, universal_newlines=True,
             )
             ssid = bssid = signal_pct = None
             for line in out.splitlines():
@@ -290,8 +290,7 @@ def get_wifi_info():
     try:
         out = subprocess.check_output(
             ["nmcli", "-t", "-f", "active,ssid,bssid,signal", "dev", "wifi"],
-            stderr=subprocess.DEVNULL,
-            universal_newlines=True,
+            stderr=subprocess.DEVNULL, universal_newlines=True,
         )
         for line in out.splitlines():
             if line.startswith("yes:"):
@@ -301,12 +300,7 @@ def get_wifi_info():
                     bssid = parts[2]
                     sig   = int(parts[3]) if parts[3].isdigit() else None
                     rssi  = int(round((sig / 2) - 100)) if sig is not None else None
-                    return {
-                        "ssid": ssid,
-                        "bssid": bssid,
-                        "rssi": rssi,
-                        "signal_percent": sig,
-                    }
+                    return {"ssid": ssid, "bssid": bssid, "rssi": rssi, "signal_percent": sig}
     except Exception:
         pass
 
@@ -328,7 +322,6 @@ def get_hostname(ip: str):
 # =============================================================================
 
 def ping_host(ip: str):
-    """Ping a single host; return (ip, hostname, status)."""
     try:
         if platform.system().lower() == "windows":
             subprocess.check_output(
@@ -366,27 +359,20 @@ def scan_network(network_range: str, router_ip: str) -> list:
 # =============================================================================
 
 def ping_detailed(host: str, count: int = 5, timeout_ms: int = 1000):
-    """Cross-platform ping returning min/avg/max/jitter/loss stats."""
     try:
         if platform.system().lower() == "windows":
             output = subprocess.check_output(
                 ["ping", "-n", str(count), "-w", str(timeout_ms), host],
-                stderr=subprocess.STDOUT,
-                universal_newlines=True,
+                stderr=subprocess.STDOUT, universal_newlines=True,
             )
             loss_pct = None
-            m = re.search(
-                r"Lost\s*=\s*\d+.*\((\d+)\s*% loss\)",
-                output,
-                re.IGNORECASE,
-            )
+            m = re.search(r"Lost\s*=\s*\d+.*\((\d+)\s*% loss\)", output, re.IGNORECASE)
             if m:
                 loss_pct = float(m.group(1))
             min_ms = avg_ms = max_ms = jitter_ms = None
             m2 = re.search(
                 r"Minimum\s*=\s*(\d+)\s*ms.*Maximum\s*=\s*(\d+)\s*ms.*Average\s*=\s*(\d+)\s*ms",
-                output,
-                re.IGNORECASE,
+                output, re.IGNORECASE,
             )
             if m2:
                 min_ms    = float(m2.group(1))
@@ -394,50 +380,33 @@ def ping_detailed(host: str, count: int = 5, timeout_ms: int = 1000):
                 avg_ms    = float(m2.group(3))
                 jitter_ms = max_ms - min_ms
             return {
-                "host": host,
-                "min_ms": min_ms,
-                "avg_ms": avg_ms,
-                "max_ms": max_ms,
-                "jitter_ms": jitter_ms,
-                "loss_pct": loss_pct,
-                "duplicates": 0,
+                "host": host, "min_ms": min_ms, "avg_ms": avg_ms,
+                "max_ms": max_ms, "jitter_ms": jitter_ms,
+                "loss_pct": loss_pct, "duplicates": 0,
             }
         else:
             timeout_sec = max(1, int(timeout_ms / 1000))
             output = subprocess.check_output(
                 ["ping", "-c", str(count), "-W", str(timeout_sec), host],
-                stderr=subprocess.STDOUT,
-                universal_newlines=True,
+                stderr=subprocess.STDOUT, universal_newlines=True,
             )
             loss_pct = None
-            m = re.search(
-                r"(\d+\.?\d*)%\s*packet loss",
-                output,
-                re.IGNORECASE,
-            )
+            m = re.search(r"(\d+\.?\d*)%\s*packet loss", output, re.IGNORECASE)
             if m:
                 loss_pct = float(m.group(1))
             min_ms = avg_ms = max_ms = jitter_ms = None
             m2 = re.search(r"rtt [^=]*=\s*([\d.]+)/([\d.]+)/([\d.]+)/([\d.]+)", output)
             if m2:
-                min_ms, avg_ms, max_ms, jitter_ms = (
-                    float(m2.group(i)) for i in range(1, 5)
-                )
+                min_ms, avg_ms, max_ms, jitter_ms = (float(m2.group(i)) for i in range(1, 5))
             dup = 0
             md = re.search(r"(\d+)\s+duplicates", output, re.IGNORECASE)
             if md:
                 dup = int(md.group(1))
             return {
-                "host": host,
-                "min_ms": min_ms,
-                "avg_ms": avg_ms,
-                "max_ms": max_ms,
-                "jitter_ms": jitter_ms,
-                "loss_pct": loss_pct,
-                "duplicates": dup,
+                "host": host, "min_ms": min_ms, "avg_ms": avg_ms,
+                "max_ms": max_ms, "jitter_ms": jitter_ms,
+                "loss_pct": loss_pct, "duplicates": dup,
             }
-    except subprocess.CalledProcessError:
-        return None
     except Exception:
         return None
 
@@ -491,15 +460,11 @@ def ping_isp_local(dest: str = "8.8.8.8"):
     try:
         if platform.system().lower() == "windows":
             tr = subprocess.check_output(
-                ["tracert", "-d", dest],
-                stderr=subprocess.STDOUT,
-                universal_newlines=True,
+                ["tracert", "-d", dest], stderr=subprocess.STDOUT, universal_newlines=True,
             )
         else:
             tr = subprocess.check_output(
-                ["traceroute", "-n", dest],
-                stderr=subprocess.STDOUT,
-                universal_newlines=True,
+                ["traceroute", "-n", dest], stderr=subprocess.STDOUT, universal_newlines=True,
             )
     except Exception as e:
         print(f"{Fore.RED}Traceroute failed: {e}{Style.RESET_ALL}")
@@ -556,7 +521,7 @@ def _spin_stop(t: threading.Thread):
     t.join()
 
 # =============================================================================
-# Speed test rating helper (no bars)
+# Speed test rating helper
 # =============================================================================
 
 def _rating(dl: float, ul: float, ping: float) -> str:
@@ -576,7 +541,7 @@ def _cf_req(url: str, data=None, method: str = "GET", timeout: int = 30):
         "Cache-Control":   "no-cache, no-store",
         "Pragma":          "no-cache",
         "Connection":      "keep-alive",
-        "Accept-Encoding": "identity",   # disable compression — measure raw bytes
+        "Accept-Encoding": "identity",
     }
     if data is not None:
         headers["Content-Type"]   = "application/octet-stream"
@@ -589,16 +554,12 @@ def _is_rate_limited(err_str: str) -> bool:
     return "429" in err_str or "Too Many" in err_str or "403" in err_str
 
 # =============================================================================
-# Speed test — timed download (30 s window, live progress)
+# Speed test
 # =============================================================================
 
 def _download_timed_stream(url: str, duration: float, results: list, idx: int, errors: dict):
-    """
-    Download from url for up to `duration` seconds, measuring sustained throughput.
-    Reads as many bytes as arrive within the window; does NOT require the full file.
-    """
-    total   = 0
-    t0      = time.perf_counter()
+    total    = 0
+    t0       = time.perf_counter()
     deadline = t0 + duration
     try:
         with _cf_req(url, timeout=int(duration) + 15) as resp:
@@ -609,17 +570,14 @@ def _download_timed_stream(url: str, duration: float, results: list, idx: int, e
                 total += len(chunk)
         elapsed = time.perf_counter() - t0
         if elapsed >= 2.0 and total >= 65_536:
-            results[idx] = total / elapsed          # bytes/sec
+            results[idx] = total / elapsed
         else:
-            errors[idx] = (
-                f"too little data: {total} B in {elapsed:.2f}s"
-            )
+            errors[idx] = f"too little data: {total} B in {elapsed:.2f}s"
     except Exception as e:
         errors[idx] = str(e)
 
 
 def _upload_stream_worker(url: str, size: int, results: list, idx: int, errors: dict):
-    """Upload `size` random bytes and measure throughput."""
     block = os.urandom(65_536)
     data  = (block * ((size + 65_535) // 65_536))[:size]
     try:
@@ -636,10 +594,6 @@ def _upload_stream_worker(url: str, size: int, results: list, idx: int, errors: 
 
 
 def _measure_ping_http(attempts: int = 10) -> float | None:
-    """
-    Measure HTTP RTT using a 0-byte endpoint (no payload = pure network RTT).
-    Tries each PING_TARGET in order; returns trimmed-median ms or None.
-    """
     for _name, url in PING_TARGETS:
         times = []
         for _ in range(attempts):
@@ -653,45 +607,34 @@ def _measure_ping_http(attempts: int = 10) -> float | None:
             time.sleep(0.05)
         if len(times) >= 3:
             times.sort()
-            trimmed = times[:max(2, int(len(times) * 0.8))]   # drop top 20% spikes
+            trimmed = times[:max(2, int(len(times) * 0.8))]
             return trimmed[len(trimmed) // 2]
     return None
 
 
 def _measure_download(streams: int = NUM_STREAMS, duration: float = DOWNLOAD_DURATION) -> tuple:
-    """
-    Timed download: each stream reads for `duration` seconds from the best available server.
-    Returns (Mbps: float, server_name: str) or (None, error_summary: str).
-    """
     all_errors = []
-
     for name, url, *_ in DOWNLOAD_SOURCES:
-        # Quick canary: 3-second probe to verify the URL actually delivers bytes
         can_res  = [0.0]
         can_err: dict = {}
         ct = threading.Thread(
             target=_download_timed_stream,
-            args=(url, 3.0, can_res, 0, can_err),
-            daemon=True,
+            args=(url, 3.0, can_res, 0, can_err), daemon=True,
         )
         ct.start()
         ct.join(timeout=18)
-
         if 0 in can_err:
             all_errors.append(f"{name}: {can_err[0]}")
             continue
         if can_res[0] == 0:
             all_errors.append(f"{name}: canary returned no usable data")
             continue
-
-        # Full timed download across all streams simultaneously
         results = [0.0] * streams
         errors: dict = {}
         threads = [
             threading.Thread(
                 target=_download_timed_stream,
-                args=(url, duration, results, i, errors),
-                daemon=True,
+                args=(url, duration, results, i, errors), daemon=True,
             )
             for i in range(streams)
         ]
@@ -699,22 +642,14 @@ def _measure_download(streams: int = NUM_STREAMS, duration: float = DOWNLOAD_DUR
             t.start()
         for t in threads:
             t.join(timeout=duration + 20)
-
         total_bps = sum(results)
         if total_bps > 0:
-            mbps = (total_bps * 8) / 1_000_000
-            return mbps, name
-
+            return (total_bps * 8) / 1_000_000, name
         all_errors.append(f"{name}: all parallel streams returned 0")
-
     return None, " | ".join(all_errors) or "All servers failed"
 
 
 def _measure_upload(streams: int = NUM_STREAMS, size: int = UPLOAD_SIZE) -> tuple:
-    """
-    Try each UPLOAD_ENDPOINT in order.
-    Returns (Mbps: float, name: str) or (None, error: str).
-    """
     last_errors: dict = {}
     for name, url in UPLOAD_ENDPOINTS:
         results = [0.0] * streams
@@ -722,8 +657,7 @@ def _measure_upload(streams: int = NUM_STREAMS, size: int = UPLOAD_SIZE) -> tupl
         threads = [
             threading.Thread(
                 target=_upload_stream_worker,
-                args=(url, size, results, i, errors),
-                daemon=True,
+                args=(url, size, results, i, errors), daemon=True,
             )
             for i in range(streams)
         ]
@@ -735,7 +669,6 @@ def _measure_upload(streams: int = NUM_STREAMS, size: int = UPLOAD_SIZE) -> tupl
         if total_bps > 0:
             return (total_bps * 8) / 1_000_000, name
         last_errors = errors
-
     errs = [str(v) for v in last_errors.values()]
     return None, "; ".join(errs[:2]) or "All upload endpoints failed"
 
@@ -746,7 +679,6 @@ def speed_test() -> tuple[float, float, float]:
     print(f"  {_DIM}Download : {DOWNLOAD_DURATION}s timed window across {len(DOWNLOAD_SOURCES)} servers{_RESET}")
     print(f"  {_DIM}Upload   : {UPLOAD_SIZE // 1_000_000} MB × {NUM_STREAMS} streams{_RESET}\n")
 
-    # Ping
     t       = _spin_start("Measuring ping (10 samples, trimmed median)...")
     ping_ms = _measure_ping_http()
     _spin_stop(t)
@@ -756,7 +688,6 @@ def speed_test() -> tuple[float, float, float]:
     else:
         print(f"  {_MAGENTA}Ping    :{_RESET}  {ping_ms:>6.1f} ms")
 
-    # Download — with live countdown
     print(f"  {_DIM}Starting {DOWNLOAD_DURATION}s download test...{_RESET}")
     _countdown_done = threading.Event()
 
@@ -774,41 +705,28 @@ def speed_test() -> tuple[float, float, float]:
 
     cd_thread = threading.Thread(target=_countdown_display, daemon=True)
     cd_thread.start()
-
     dl_mbps, dl_info = _measure_download()
-
     _countdown_done.set()
     cd_thread.join()
 
     if dl_mbps is not None and dl_mbps > 0:
-        print(
-            f"  {_GREEN}↓ Download:{_RESET}  {dl_mbps:>7.2f} Mbps  "
-            f"{_DIM}via {dl_info}{_RESET}"
-        )
+        print(f"  {_GREEN}↓ Download:{_RESET}  {dl_mbps:>7.2f} Mbps  {_DIM}via {dl_info}{_RESET}")
     else:
-        print(
-            f"  {_RED}✗ Download failed — tried all "
-            f"{len(DOWNLOAD_SOURCES)} servers:{_RESET}"
-        )
+        print(f"  {_RED}✗ Download failed — tried all {len(DOWNLOAD_SOURCES)} servers:{_RESET}")
         for part in (dl_info or "").split(" | ")[:5]:
             print(f"    {_DIM}{part}{_RESET}")
         dl_mbps = 0.0
 
-    # Upload
     t = _spin_start(f"Upload — {NUM_STREAMS} streams, auto-fallback...")
     ul_mbps, ul_info = _measure_upload()
     _spin_stop(t)
 
     if ul_mbps is not None and ul_mbps > 0:
-        print(
-            f"  {_YELLOW}↑ Upload  :{_RESET}  {ul_mbps:>7.2f} Mbps  "
-            f"{_DIM}via {ul_info}{_RESET}"
-        )
+        print(f"  {_YELLOW}↑ Upload  :{_RESET}  {ul_mbps:>7.2f} Mbps  {_DIM}via {ul_info}{_RESET}")
     else:
         print(f"  {_RED}✗ Upload failed:{_RESET} {ul_info}")
         ul_mbps = 0.0
 
-    # Summary
     print(f"\n  {_BOLD}{_CYAN}{'─' * 40}{_RESET}")
     print(f"  {_BOLD}Download  : {dl_mbps:.2f} Mbps{_RESET}")
     print(f"  {_BOLD}Upload    : {ul_mbps:.2f} Mbps{_RESET}")
@@ -827,10 +745,7 @@ def speed_test() -> tuple[float, float, float]:
 
 def bdix_speed_test() -> float | None:
     if not HAS_SPEEDTEST:
-        print(
-            f"{Fore.YELLOW}speedtest-cli not installed — skipping BDIX test."
-            f"{Style.RESET_ALL}"
-        )
+        print(f"{Fore.YELLOW}speedtest-cli not installed — skipping BDIX test.{Style.RESET_ALL}")
         return None
     try:
         st          = _speedtest_module.Speedtest()
@@ -845,38 +760,27 @@ def bdix_speed_test() -> float | None:
                     break
             if bdix_server:
                 break
-
         if not bdix_server:
-            print(
-                f"{Fore.YELLOW}No BDIX server found. "
-                f"Using best available.{Style.RESET_ALL}"
-            )
+            print(f"{Fore.YELLOW}No BDIX server found. Using best available.{Style.RESET_ALL}")
             st.get_best_server()
         else:
-            print(
-                f"{Fore.GREEN}BDIX Server: {bdix_server['sponsor']} — "
-                f"{bdix_server['name']}{Style.RESET_ALL}"
-            )
+            print(f"{Fore.GREEN}BDIX Server: {bdix_server['sponsor']} — {bdix_server['name']}{Style.RESET_ALL}")
             st.get_best_server([bdix_server])
-
         download = st.download() / 1_000_000
         upload   = st.upload()   / 1_000_000
-        print(
-            f"{Fore.CYAN}BDIX Download : {download:.2f} Mbps{Style.RESET_ALL}"
-        )
-        print(
-            f"{Fore.CYAN}BDIX Upload   : {upload:.2f} Mbps{Style.RESET_ALL}"
-        )
+        print(f"{Fore.CYAN}BDIX Download : {download:.2f} Mbps{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}BDIX Upload   : {upload:.2f} Mbps{Style.RESET_ALL}")
         return download
     except Exception as e:
         print(f"{Fore.RED}BDIX speed test failed: {e}{Style.RESET_ALL}")
         return None
 
 # =============================================================================
-# Wi-Fi channel analysis (Termux / Linux only)
+# Wi-Fi channel analysis — KEY FIX: BSSID-exact MAC match
 # =============================================================================
 
-def freq_to_channel(freq: int) -> int | None:
+def freq_to_channel(freq: int):
+    """Convert MHz frequency to Wi-Fi channel number."""
     if 2412 <= freq <= 2484:
         return (freq - 2412) // 5 + 1
     if 5170 <= freq <= 5825:
@@ -884,73 +788,34 @@ def freq_to_channel(freq: int) -> int | None:
     return None
 
 
-def analyze_wifi_channels_termux():
-    try:
-        current_bssid      = ""
-        current_link_speed = None
-        try:
-            out = subprocess.check_output(
-                ["termux-wifi-connectioninfo"],
-                universal_newlines=True,
-            )
-            if out.strip():
-                d                  = json.loads(out)
-                current_bssid      = d.get("bssid", "").lower()
-                current_link_speed = d.get("link_speed_mbps")
-        except Exception:
-            pass
+def freq_to_band(freq: int) -> str:
+    """Return human-readable band string from MHz frequency."""
+    if 2400 <= freq <= 2500:
+        return "2.4 GHz"
+    if 5000 <= freq <= 6000:
+        return "5 GHz"
+    return "Unknown"
 
-        try:
-            out = subprocess.check_output(
-                ["termux-wifi-scaninfo"],
-                universal_newlines=True,
-            )
-            if not out.strip():
-                return {}, None
-            wifi_data = json.loads(out)
-        except Exception:
-            return {}, None
 
-        channels: dict        = {}
-        current_network: dict | None = None
+def _normalise_mac(mac: str) -> str:
+    """Lowercase colon-separated MAC for consistent comparison."""
+    mac = (mac or "").strip().lower()
+    digits = re.sub(r"[^0-9a-f]", "", mac)
+    if len(digits) == 12:
+        return ":".join(digits[i:i+2] for i in range(0, 12, 2))
+    return mac  # return as-is if not standard length
 
-        for net in wifi_data:
-            freq      = net.get("frequency_mhz", 0)
-            ssid      = net.get("ssid", "Hidden")
-            bssid     = net.get("bssid", "").lower()
-            rssi      = net.get("rssi", 0)
-            bandwidth = net.get("channel_bandwidth_mhz", 20)
-            channel   = freq_to_channel(freq)
-            if not channel:
-                continue
-            info = {
-                "ssid": ssid,
-                "bssid": bssid,
-                "rssi": rssi,
-                "bandwidth": bandwidth,
-            }
-            channels.setdefault(channel, []).append(info)
-            if current_bssid and bssid == current_bssid:
-                current_network = {
-                    "ssid": ssid,
-                    "channel": channel,
-                    "rssi": rssi,
-                    "bandwidth": bandwidth,
-                    "link_speed_mbps": current_link_speed,
-                }
-        return channels, current_network
 
-    except Exception as e:
-        print(f"Wi-Fi channel analysis failed: {e}")
-        return {}, None
+def _is_unknown_ssid(ssid: str) -> bool:
+    return not ssid or ssid.strip().lower() in (
+        "<unknown ssid>", "unknown ssid", "", "null"
+    )
 
 
 def check_link_speed(interface: str = "wlan0") -> str:
     try:
         out = subprocess.check_output(
-            ["iwconfig", interface],
-            text=True,
-            stderr=subprocess.DEVNULL,
+            ["iwconfig", interface], text=True, stderr=subprocess.DEVNULL,
         )
         m = re.search(r"Bit Rate[:=]([0-9.]+\s*Mb/s)", out)
         return m.group(1) if m else "N/A"
@@ -959,114 +824,340 @@ def check_link_speed(interface: str = "wlan0") -> str:
 
 
 def is_channel_overlapping(channel: int) -> bool:
-    return channel <= 14 and channel not in (1, 6, 11)
+    """Only 2.4 GHz channels can overlap; 5 GHz channels never do."""
+    return channel is not None and channel <= 14 and channel not in (1, 6, 11)
+
+
+def analyze_wifi_channels_termux():
+    """
+    Returns (channels: dict, current_network: dict | None).
+
+    Match priority (highest → lowest):
+      1. Exact BSSID match          — most reliable, finds correct radio
+      2. Adjacent BSSID match       — catches the other radio on dual-band routers
+                                      (router MACs typically differ by ±1..4 on last byte)
+      3. Best-RSSI SSID match       — same SSID, pick strongest signal
+      4. Connectioninfo frequency   — derive channel from reported freq directly
+      5. Strongest scanned AP       — last resort so something is always shown
+    """
+    MAX_SCAN_ATTEMPTS = 5
+
+    # ── Step 1: get connection info ───────────────────────────────────────────
+    conn_bssid      = ""
+    conn_ssid       = ""
+    conn_link_speed = None
+    conn_rssi       = None
+    conn_freq       = None
+
+    for attempt in range(3):
+        try:
+            subprocess.run(
+                ["termux-location", "-p", "network", "-r", "once"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                text=True, timeout=8,
+            )
+        except Exception:
+            pass
+        try:
+            out = subprocess.check_output(
+                ["termux-wifi-connectioninfo"],
+                universal_newlines=True, timeout=10,
+            )
+            if out.strip():
+                d               = json.loads(out)
+                conn_bssid      = _normalise_mac(d.get("bssid") or "")
+                conn_ssid       = (d.get("ssid") or "").strip()
+                conn_link_speed = d.get("link_speed_mbps")
+                conn_rssi       = d.get("rssi")
+                conn_freq       = d.get("frequency_mhz") or d.get("frequency")
+                break
+        except Exception:
+            time.sleep(0.5 * (attempt + 1))
+
+    # Build set of candidate BSSIDs — exact + adjacent (±4) on last byte.
+    # Dual-band routers share the same OUI; radios differ on last octet only.
+    candidate_bssids: set[str] = set()
+    if conn_bssid and len(conn_bssid) == 17:
+        candidate_bssids.add(conn_bssid)
+        parts = conn_bssid.split(":")
+        last  = int(parts[-1], 16)
+        for delta in range(-4, 5):
+            adj = parts[:-1] + [f"{(last + delta) & 0xFF:02x}"]
+            candidate_bssids.add(":".join(adj))
+
+    # ── Step 2: scan with retries ─────────────────────────────────────────────
+    wifi_data = []
+    for attempt in range(MAX_SCAN_ATTEMPTS):
+        try:
+            out = subprocess.check_output(
+                ["termux-wifi-scaninfo"],
+                universal_newlines=True, timeout=15,
+            )
+            if out.strip():
+                parsed = json.loads(out)
+                if isinstance(parsed, list) and parsed:
+                    wifi_data = parsed
+                    break
+        except Exception:
+            pass
+        delay = 0.5 * (attempt + 1)
+        print(
+            f"{Fore.YELLOW}  Wi-Fi scan attempt {attempt + 1}/{MAX_SCAN_ATTEMPTS} "
+            f"returned no data — retrying in {delay:.1f}s…{Style.RESET_ALL}"
+        )
+        time.sleep(delay)
+
+    # Scan completely failed — minimal result from connectioninfo
+    if not wifi_data:
+        print(f"{Fore.YELLOW}  Scan returned no APs. Using connection-info only.{Style.RESET_ALL}")
+        ch  = freq_to_channel(int(conn_freq)) if conn_freq else None
+        bnd = freq_to_band(int(conn_freq))    if conn_freq else "Unknown"
+        ls  = f"{conn_link_speed} Mbps" if conn_link_speed is not None else check_link_speed()
+        if conn_bssid or conn_ssid:
+            return {}, {
+                "ssid":            conn_ssid or "Unknown",
+                "bssid":           conn_bssid or "Unknown",
+                "channel":         ch,
+                "band":            bnd,
+                "rssi":            conn_rssi,
+                "bandwidth":       None,
+                "link_speed_mbps": conn_link_speed,
+                "link_speed_str":  ls,
+                "source":          "connectioninfo-only (no scan data)",
+            }
+        return {}, None
+
+    # ── Step 3: build channel map & score every scanned AP ───────────────────
+    channels: dict = {}
+    exact_match    = None   # priority 1
+    adjacent_match = None   # priority 2
+    ssid_matches   = []     # priority 3 — all APs with matching SSID
+    best_network   = None   # priority 5 — strongest RSSI of all APs
+
+    for net in wifi_data:
+        raw_freq  = net.get("frequency_mhz") or net.get("frequency") or 0
+        freq      = int(raw_freq)
+        ssid      = (net.get("ssid") or "Hidden").strip()
+        bssid     = _normalise_mac(net.get("bssid") or "")
+        rssi      = net.get("rssi", -100)
+        bandwidth = net.get("channel_bandwidth_mhz", 20)
+        channel   = freq_to_channel(freq)
+        band      = freq_to_band(freq)
+        if not channel:
+            continue
+
+        channels.setdefault(channel, []).append(
+            {"ssid": ssid, "bssid": bssid, "rssi": rssi, "bandwidth": bandwidth}
+        )
+
+        entry = {
+            "ssid": ssid, "bssid": bssid, "channel": channel, "band": band,
+            "rssi": rssi, "bandwidth": bandwidth,
+            "link_speed_mbps": conn_link_speed,
+        }
+
+        # Priority 5 — global best signal fallback
+        if best_network is None or rssi > best_network.get("rssi", -999):
+            best_network = dict(entry, source="strongest-ap-fallback")
+
+        # Priority 1 — exact BSSID
+        if conn_bssid and bssid == conn_bssid:
+            if exact_match is None or rssi > exact_match.get("rssi", -999):
+                exact_match = dict(entry, source="bssid-exact-match ✓")
+
+        # Priority 2 — adjacent BSSID (other radio, same physical router)
+        elif bssid in candidate_bssids:
+            if adjacent_match is None or rssi > adjacent_match.get("rssi", -999):
+                adjacent_match = dict(entry, source="bssid-adjacent-match (other radio)")
+
+        # Priority 3 — SSID match
+        if (not _is_unknown_ssid(conn_ssid)
+                and not _is_unknown_ssid(ssid)
+                and ssid == conn_ssid):
+            ssid_matches.append(entry)
+
+    # ── Step 4: pick best match in priority order ─────────────────────────────
+    current_network = None
+
+    if exact_match:
+        current_network = exact_match
+    elif adjacent_match:
+        current_network = adjacent_match
+    elif ssid_matches:
+        best_ssid = max(ssid_matches, key=lambda e: e.get("rssi", -999))
+        current_network = dict(best_ssid, source="ssid-best-rssi-match")
+    elif conn_freq:
+        # Priority 4 — derive channel from connectioninfo frequency
+        ch  = freq_to_channel(int(conn_freq))
+        bnd = freq_to_band(int(conn_freq))
+        current_network = {
+            "ssid":            conn_ssid or "Unknown",
+            "bssid":           conn_bssid or "Unknown",
+            "channel":         ch,
+            "band":            bnd,
+            "rssi":            conn_rssi,
+            "bandwidth":       None,
+            "link_speed_mbps": conn_link_speed,
+            "source":          "connectioninfo-frequency-derived",
+        }
+    elif best_network:
+        current_network = best_network
+    elif conn_bssid or conn_ssid:
+        current_network = {
+            "ssid":            conn_ssid or "Unknown",
+            "bssid":           conn_bssid or "Unknown",
+            "channel":         None,
+            "band":            "Unknown",
+            "rssi":            conn_rssi,
+            "bandwidth":       None,
+            "link_speed_mbps": conn_link_speed,
+            "source":          "connectioninfo-no-scan-match",
+        }
+
+    # ── Step 5: fill in missing fields ───────────────────────────────────────
+    if current_network:
+        # Use connectioninfo RSSI if scan returned -100 (absent)
+        if current_network.get("rssi") is None or current_network.get("rssi", -100) <= -100:
+            current_network["rssi"] = conn_rssi
+        ls = current_network.get("link_speed_mbps")
+        current_network["link_speed_str"] = (
+            f"{ls} Mbps" if ls is not None else check_link_speed()
+        )
+        current_network.setdefault("bssid", conn_bssid or "Unknown")
+        current_network.setdefault("band",  "Unknown")
+
+    return channels, current_network
+
+
+def _print_general_wifi_tips():
+    print(f"\n{Fore.CYAN}General Wi-Fi tips:{Style.RESET_ALL}")
+    tips = [
+        "Keep router firmware up to date.",
+        "Place router centrally, elevated, away from walls & appliances.",
+        "Minimise interference: keep away from microwaves, cordless phones.",
+        "Use the 5 GHz band for less congestion and higher throughput.",
+        "Use non-overlapping 2.4 GHz channels: 1, 6, or 11.",
+        "Regularly audit connected devices and remove unauthorised ones.",
+        "Enable WPA3 if your router supports it.",
+    ]
+    for i, tip in enumerate(tips, 1):
+        print(f"  {i}. {tip}")
 
 
 def print_wifi_analysis_results(channels: dict, current_network: dict):
     if not current_network:
-        print(
-            f"{Fore.RED}Unable to identify your current "
-            f"Wi-Fi network.{Style.RESET_ALL}"
-        )
+        print(f"{Fore.RED}Unable to identify your current Wi-Fi network.{Style.RESET_ALL}")
         return
-    ssid       = current_network["ssid"]
-    channel    = current_network["channel"]
-    rssi       = current_network["rssi"]
-    bandwidth  = current_network["bandwidth"]
-    link_speed = current_network.get("link_speed_mbps")
-    link_str   = f"{link_speed} Mbps" if link_speed is not None else check_link_speed()
+
+    ssid      = current_network.get("ssid") or "Unknown"
+    bssid     = current_network.get("bssid") or "Unknown"
+    channel   = current_network.get("channel")
+    band      = current_network.get("band") or "Unknown"
+    rssi      = current_network.get("rssi")
+    bandwidth = current_network.get("bandwidth")
+    link_str  = current_network.get("link_speed_str") or check_link_speed()
+    source    = current_network.get("source", "")
 
     print(f"\n{Fore.CYAN}=== Your Wi-Fi Network Analysis ==={Style.RESET_ALL}")
-    print(f"SSID            : {ssid}")
-    print(f"Channel         : {channel}")
-    print(f"Signal Strength : {rssi} dBm")
-    print(f"Channel Width   : {bandwidth} MHz")
-    print(f"Link Speed      : {link_str}")
 
-    if is_channel_overlapping(channel):
+    if _is_unknown_ssid(ssid):
         print(
-            f"\n{Fore.YELLOW}Warning: Channel overlaps. Recommended "
-            f"2.4 GHz channels: 1, 6, or 11.{Style.RESET_ALL}"
+            f"SSID            : {Fore.YELLOW}<hidden — grant Precise Location "
+            f"permission to Termux>{Style.RESET_ALL}"
         )
     else:
-        print(
-            f"\n{Fore.GREEN}Your Wi-Fi channel is non-overlapping."
-            f"{Style.RESET_ALL}"
-        )
+        print(f"SSID            : {ssid}")
 
-    suggest_best_channel(channels, current_network)
+    print(f"BSSID           : {bssid}")
+    print(f"Band            : {band}")
+    print(f"Channel         : {channel if channel is not None else 'N/A'}")
+    print(f"Signal Strength : {f'{rssi} dBm' if rssi is not None else 'N/A'}")
+    print(f"Channel Width   : {f'{bandwidth} MHz' if bandwidth is not None else 'N/A'}")
+    print(f"Link Speed      : {link_str}")
+    if source:
+        print(f"{Fore.CYAN}  (match method: {source}){Style.RESET_ALL}")
+
+    if channel is not None:
+        if band == "5 GHz":
+            # 5 GHz channels are non-overlapping by design
+            print(f"\n{Fore.GREEN}✓ 5 GHz band — channels never overlap. No interference concern.{Style.RESET_ALL}")
+        elif is_channel_overlapping(channel):
+            print(
+                f"\n{Fore.YELLOW}⚠ Channel {channel} (2.4 GHz) overlaps with neighbours. "
+                f"Recommended channels: 1, 6, or 11.{Style.RESET_ALL}"
+            )
+        else:
+            print(f"\n{Fore.GREEN}✓ Channel {channel} is non-overlapping — good choice.{Style.RESET_ALL}")
+        suggest_best_channel(channels, current_network)
+    else:
+        print(f"\n{Fore.YELLOW}Channel details could not be determined.{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}How to fix:{Style.RESET_ALL}")
+        print("  1. Grant Termux Precise Location permission:")
+        print("     Android Settings → Apps → Termux → Permissions → Location → Allow (Precise)")
+        print("  2. Enable device Location / GPS.")
+        print("  3. Test:  termux-wifi-scaninfo")
+        print("  4. Toggle Wi-Fi off/on then re-run.")
+        _print_general_wifi_tips()
 
 
 def suggest_best_channel(channels: dict, current_network: dict):
     if not channels:
-        print(f"{Fore.RED}No Wi-Fi channels detected.{Style.RESET_ALL}")
+        print(f"{Fore.RED}No Wi-Fi channels detected in scan.{Style.RESET_ALL}")
         return
-    ch         = current_network["channel"]
-    candidates = (
-        [1, 6, 11]
-        if ch <= 14
-        else [
-            36, 40, 44, 48, 52, 56, 60, 64,
-            100, 104, 108, 112, 116, 120, 124, 128,
-            132, 136, 140, 144, 149, 153, 157, 161, 165,
+
+    ch   = current_network.get("channel")
+    band = current_network.get("band", "Unknown")
+    if ch is None:
+        return
+
+    # Non-overlapping candidate channels per band
+    if band == "5 GHz" or ch > 14:
+        # UNII-3 first (no DFS needed), then UNII-1, then DFS bands
+        candidates = [
+            149, 153, 157, 161, 165,          # UNII-3 — best for most home routers
+            36, 40, 44, 48,                    # UNII-1 — indoor safe, no DFS
+            52, 56, 60, 64,                    # UNII-2A — DFS
+            100, 104, 108, 112, 116, 120,      # UNII-2C — DFS
+            124, 128, 132, 136, 140, 144,
         ]
-    )
-    best = min(candidates, key=lambda x: len(channels.get(x, [])))
-    print(f"\n{Fore.CYAN}Channel Recommendation:{Style.RESET_ALL}")
-    if best == ch:
-        print(f"  Channel {ch} is already optimal.")
     else:
-        print(f"  Consider switching to channel {best} for less interference.")
-    print("\n  Wi-Fi tips:")
-    for i, tip in enumerate(
-        [
-            "Keep router firmware up to date.",
-            "Place router centrally, away from walls.",
-            "Minimise interference from other electronics.",
-            "Use 5 GHz band for less interference and higher speeds.",
-            "Regularly audit devices and remove unauthorised ones.",
-        ],
-        1,
-    ):
-        print(f"    {i}. {tip}")
+        candidates = [1, 6, 11]
+
+    best    = min(candidates, key=lambda x: (len(channels.get(x, [])), x))
+    crowded = {k: len(v) for k, v in channels.items()}
+
+    print(f"\n{Fore.CYAN}Channel Recommendation:{Style.RESET_ALL}")
+    print(f"  Channels in use : { {k: v for k, v in sorted(crowded.items())} }")
+    if best == ch:
+        print(f"  ✓ Channel {ch} already has the least congestion — no change needed.")
+    else:
+        print(
+            f"  → Consider switching to channel {best} "
+            f"({len(channels.get(best, []))} APs) "
+            f"vs your current channel {ch} ({len(channels.get(ch, []))} APs)."
+        )
+    _print_general_wifi_tips()
 
 # =============================================================================
 # Network problem detection
 # =============================================================================
 
 def detect_network_problems(download_mbps, upload_mbps, ping, devices):
-    """
-    Analyse speed/ping results and return (problems, tips) lists.
-    download_mbps / upload_mbps are in Mbps (not MBps).
-    """
     problems, tips = [], []
 
     if download_mbps is not None and upload_mbps is not None:
         if (download_mbps + upload_mbps) < 5:
             problems.append("Very low overall network speed")
-            tips.append(
-                "Contact your ISP to check for service issues or throttling"
-            )
-
+            tips.append("Contact your ISP to check for service issues or throttling")
         if download_mbps > 0 and upload_mbps < download_mbps * 0.05:
             problems.append("Severely low upload speed relative to download")
-            tips.append(
-                "Check for large file uploads or backup processes "
-                "running in background"
-            )
+            tips.append("Check for large file uploads or backup processes running in background")
         elif download_mbps > 0 and upload_mbps < download_mbps * 0.1:
             problems.append("Low upload speed relative to download")
-            tips.append(
-                "Limit background upload tasks or check your ISP "
-                "upload allocation"
-            )
-
+            tips.append("Limit background upload tasks or check your ISP upload allocation")
         if upload_mbps > 0 and download_mbps < upload_mbps * 0.5:
             problems.append("Unusually low download speed relative to upload")
-            tips.append(
-                "Check for background downloads or streaming on "
-                "other devices"
-            )
+            tips.append("Check for background downloads or streaming on other devices")
     else:
         problems.append("Unable to perform speed test")
         tips.append("Check your internet connection and try again later")
@@ -1074,14 +1165,10 @@ def detect_network_problems(download_mbps, upload_mbps, ping, devices):
     if ping is not None:
         if ping > 200:
             problems.append("Severe network latency (>200 ms)")
-            tips.append(
-                "Check for network congestion or try changing your DNS server"
-            )
+            tips.append("Check for network congestion or try changing your DNS server")
         elif ping > 100:
             problems.append("High network latency (>100 ms)")
-            tips.append(
-                "Close bandwidth-heavy applications; consider wired connection"
-            )
+            tips.append("Close bandwidth-heavy applications; consider wired connection")
     else:
         problems.append("Unable to perform ping test")
         tips.append("Check your internet connection and try again later")
@@ -1096,15 +1183,9 @@ def detect_network_problems(download_mbps, upload_mbps, ping, devices):
 def print_analysis_results(problems: list, tips: list):
     print(f"\n{Fore.CYAN}=== Network Analysis Results ==={Style.RESET_ALL}")
     if not problems:
-        print(
-            f"{Fore.GREEN}✓ No significant network problems detected."
-            f"{Style.RESET_ALL}"
-        )
+        print(f"{Fore.GREEN}✓ No significant network problems detected.{Style.RESET_ALL}")
     else:
-        print(
-            f"{Fore.YELLOW}Potential network issues detected:"
-            f"{Style.RESET_ALL}"
-        )
+        print(f"{Fore.YELLOW}Potential network issues detected:{Style.RESET_ALL}")
         for i, p in enumerate(problems, 1):
             print(f"  {Fore.RED}{i}. {p}{Style.RESET_ALL}")
     print(f"\n{Fore.CYAN}Recommendations:{Style.RESET_ALL}")
@@ -1148,10 +1229,7 @@ def start_local_dashboard(port: int = 8000):
                             "<body style='font-family:monospace;padding:2em'>"
                             "<h2>📡 CK Network Dashboard</h2>"
                             "<p><b>index.html</b> not found next to this script.</p>"
-                            "<p>Place your dashboard HTML file as "
-                            "<code>index.html</code> in the same directory.</p>"
-                            "<p>Results JSON: <a href='/api/results'>"
-                            "/api/results</a></p>"
+                            "<p>Results JSON: <a href='/api/results'>/api/results</a></p>"
                             "</body></html>"
                         )
                     b = content.encode("utf-8")
@@ -1168,10 +1246,8 @@ def start_local_dashboard(port: int = 8000):
             if self.path.startswith("/api/results"):
                 payload = json.dumps(get_results_snapshot()).encode("utf-8")
                 self.send_response(200)
-                self.send_header(
-                    "Content-Type", "application/json; charset=utf-8"
-                )
-                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Type",   "application/json; charset=utf-8")
+                self.send_header("Cache-Control",  "no-store")
                 self.send_header("Content-Length", str(len(payload)))
                 self.end_headers()
                 self.wfile.write(payload)
@@ -1180,7 +1256,6 @@ def start_local_dashboard(port: int = 8000):
             return super().do_GET()
 
         def log_message(self, *_):
-            # Mute noisy HTTP logs
             pass
 
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), DashboardHandler)
@@ -1201,21 +1276,14 @@ def main():
     _clear_screen()
     print_logo()
 
+    _termux_request_location_once()
     update_results({"status": "running"})
     start_local_dashboard(port=8000)
 
     local_ip, netmask = get_network_info()
     if not local_ip or not netmask:
-        print(
-            f"{Fore.RED}Could not detect network information automatically."
-            f"{Style.RESET_ALL}"
-        )
-        update_results(
-            {
-                "status": "error",
-                "error": "Could not detect network information automatically",
-            }
-        )
+        print(f"{Fore.RED}Could not detect network information automatically.{Style.RESET_ALL}")
+        update_results({"status": "error", "error": "Could not detect network information automatically"})
         return
 
     network_range = get_network_range(local_ip, netmask)
@@ -1223,17 +1291,15 @@ def main():
     router_ip     = network_range.split("/")[0][:-1] + "1"
     isp_local_ip  = ping_isp_local()
 
-    update_results(
-        {
-            "connection": {
-                "local_ip":      local_ip,
-                "netmask":       netmask,
-                "network_range": network_range,
-                "gateway":       router_ip,
-                "isp_local_ip":  isp_local_ip,
-            }
+    update_results({
+        "connection": {
+            "local_ip":      local_ip,
+            "netmask":       netmask,
+            "network_range": network_range,
+            "gateway":       router_ip,
+            "isp_local_ip":  isp_local_ip,
         }
-    )
+    })
 
     print(f"\n{Fore.CYAN}=== Connection Details ==={Style.RESET_ALL}")
     print(f"{Fore.YELLOW}Local IP        : {Fore.GREEN}{local_ip}")
@@ -1242,122 +1308,79 @@ def main():
     print(f"{Fore.YELLOW}Assumed Gateway : {Fore.GREEN}{router_ip}")
 
     if wifi_info:
-        print(
-            f"{Fore.YELLOW}SSID            : "
-            f"{Fore.GREEN}{wifi_info.get('ssid', 'Unknown')}"
-        )
-        print(
-            f"{Fore.YELLOW}BSSID           : "
-            f"{Fore.GREEN}{wifi_info.get('bssid', 'Unknown')}"
-        )
+        print(f"{Fore.YELLOW}SSID            : {Fore.GREEN}{wifi_info.get('ssid', 'Unknown')}")
+        print(f"{Fore.YELLOW}BSSID           : {Fore.GREEN}{wifi_info.get('bssid', 'Unknown')}")
         rssi = wifi_info.get("rssi")
         if rssi is not None:
             print(f"{Fore.YELLOW}RSSI            : {Fore.GREEN}{rssi} dBm")
-            print(
-                f"{Fore.YELLOW}Estimated Dist. : "
-                f"{Fore.GREEN}{simple_distance_estimate(rssi)}"
-            )
+            print(f"{Fore.YELLOW}Estimated Dist. : {Fore.GREEN}{simple_distance_estimate(rssi)}")
         else:
             print(f"{Fore.RED}RSSI data not available.{Style.RESET_ALL}")
     else:
-        print(
-            f"{Fore.RED}Could not retrieve Wi-Fi "
-            f"information.{Style.RESET_ALL}"
-        )
+        print(f"{Fore.RED}Could not retrieve Wi-Fi information.{Style.RESET_ALL}")
 
     rssi           = wifi_info.get("rssi")           if wifi_info else None
     signal_percent = wifi_info.get("signal_percent") if wifi_info else None
     if signal_percent is None and rssi is not None:
         signal_percent = int(max(0, min(100, (rssi + 100) * 2)))
 
-    update_results(
-        {
-            "wifi": {
-                "ssid": (
-                    wifi_info.get("ssid") if wifi_info else None
-                ) or "Unknown",
-                "bssid": (
-                    wifi_info.get("bssid") if wifi_info else None
-                ) or "Unknown",
-                "rssi":               rssi,
-                "rssi_text":          (f"{rssi} dBm" if rssi is not None else "N/A"),
-                "estimated_distance": (
-                    simple_distance_estimate(rssi)
-                    if rssi is not None
-                    else "Unknown"
-                ),
-                "signal_percent":     signal_percent,
-            }
+    update_results({
+        "wifi": {
+            "ssid":               (wifi_info.get("ssid") if wifi_info else None) or "Unknown",
+            "bssid":              (wifi_info.get("bssid") if wifi_info else None) or "Unknown",
+            "rssi":               rssi,
+            "rssi_text":          (f"{rssi} dBm" if rssi is not None else "N/A"),
+            "estimated_distance": simple_distance_estimate(rssi) if rssi is not None else "Unknown",
+            "signal_percent":     signal_percent,
         }
-    )
+    })
 
     print()
     ping_router()
 
     # 1. Network scan
-    print(
-        f"\n{Fore.YELLOW}Scanning network {network_range}..."
-        f"{Style.RESET_ALL}"
-    )
+    print(f"\n{Fore.YELLOW}Scanning network {network_range}...{Style.RESET_ALL}")
     t0      = time.time()
     devices = scan_network(network_range, router_ip)
     elapsed = time.time() - t0
 
-    update_results(
-        {
-            "devices": {
-                "count":        len(devices),
-                "items":        [
-                    {"ip": ip, "hostname": hn} for ip, hn in devices
-                ],
-                "scan_seconds": round(elapsed, 2),
-            }
+    update_results({
+        "devices": {
+            "count":        len(devices),
+            "items":        [{"ip": ip, "hostname": hn} for ip, hn in devices],
+            "scan_seconds": round(elapsed, 2),
         }
-    )
+    })
 
-    print(
-        f"\n{Fore.GREEN}Devices connected to the network: "
-        f"{len(devices)}{Style.RESET_ALL}"
-    )
+    print(f"\n{Fore.GREEN}Devices connected to the network: {len(devices)}{Style.RESET_ALL}")
     for ip, hostname in devices:
         print(f"  IP: {ip}  Hostname: {hostname}")
     print(f"\nScan completed in {elapsed:.2f} seconds")
 
     # 2. Speed test
-    print(
-        f"\n{Fore.YELLOW}Performing speed test..."
-        f"{Style.RESET_ALL}"
-    )
+    print(f"\n{Fore.YELLOW}Performing speed test...{Style.RESET_ALL}")
     dl_mbps, ul_mbps, _ping = speed_test()
     download_MBps = dl_mbps / 8
     upload_MBps   = ul_mbps / 8
 
     # 3. BDIX speed test
-    print(
-        f"\n{Fore.YELLOW}Performing BDIX speed test..."
-        f"{Style.RESET_ALL}"
-    )
+    print(f"\n{Fore.YELLOW}Performing BDIX speed test...{Style.RESET_ALL}")
     bdix_MBps = bdix_speed_test()
     if bdix_MBps is not None:
         print(f"BDIX Download speed: {bdix_MBps:.2f} Mbps")
 
-    update_results(
-        {
-            "speed": {
-                "download_mbps": dl_mbps,
-                "upload_mbps":   ul_mbps,
-                "download_MBps": download_MBps,
-                "upload_MBps":   upload_MBps,
-                "bdix_mbps":     bdix_MBps,
-            }
+    update_results({
+        "speed": {
+            "download_mbps": dl_mbps,
+            "upload_mbps":   ul_mbps,
+            "download_MBps": download_MBps,
+            "upload_MBps":   upload_MBps,
+            "bdix_mbps":     bdix_MBps,
         }
-    )
+    })
 
     # 4. Ping tests
-    print(
-        f"\n{Fore.YELLOW}Performing ping tests..."
-        f"{Style.RESET_ALL}"
-    )
+    print(f"\n{Fore.YELLOW}Performing ping tests...{Style.RESET_ALL}")
     isp_target   = isp_local_ip or router_ip or "1.1.1.1"
     ping_targets = [
         ("local_isp",  isp_target),
@@ -1373,18 +1396,14 @@ def main():
         if stats and stats.get("avg_ms") is not None:
             ping_results[key] = stats
             avg_ms = stats["avg_ms"]
-            color  = (
-                Fore.GREEN if avg_ms < 50
-                else Fore.YELLOW if avg_ms < 100
-                else Fore.RED
-            )
+            color  = Fore.GREEN if avg_ms < 50 else Fore.YELLOW if avg_ms < 100 else Fore.RED
             print(f"  Result: {color}{avg_ms:.2f} ms{Style.RESET_ALL}")
         else:
             print(f"  {Fore.RED}Ping failed{Style.RESET_ALL}")
 
     gateway_stats  = ping_detailed(router_ip, count=5) if router_ip else None
     gateway_ping   = gateway_stats.get("avg_ms") if gateway_stats else None
-    internet_stats = ping_detailed("8.8.8.8",   count=5)
+    internet_stats = ping_detailed("8.8.8.8", count=5)
     internet_avg   = internet_stats.get("avg_ms") if internet_stats else None
 
     connection_status = "Unknown"
@@ -1398,67 +1417,49 @@ def main():
         else:
             connection_status = "Poor or Unstable"
 
-    update_results(
-        {
-            "router": {
-                "ping_ms": gateway_ping,
-                "status": connection_status,
-            },
-            "health": {
-                "gateway":             gateway_stats,
-                "internet":            internet_stats,
-                "gateway_ping_ms":     gateway_ping,
-                "internet_latency_ms": internet_avg,
-                "pings":               ping_results,
-            },
-        }
-    )
+    update_results({
+        "router": {"ping_ms": gateway_ping, "status": connection_status},
+        "health": {
+            "gateway":             gateway_stats,
+            "internet":            internet_stats,
+            "gateway_ping_ms":     gateway_ping,
+            "internet_latency_ms": internet_avg,
+            "pings":               ping_results,
+        },
+    })
 
     # 5. Wi-Fi channel analysis
-    print(
-        f"\n{Fore.YELLOW}Analyzing Wi-Fi channels..."
-        f"{Style.RESET_ALL}"
-    )
+    print(f"\n{Fore.YELLOW}Analyzing Wi-Fi channels...{Style.RESET_ALL}")
     channels, current_network = analyze_wifi_channels_termux()
-    if channels and current_network:
-        link_speed     = current_network.get("link_speed_mbps")
-        link_speed_str = (
-            f"{link_speed} Mbps"
-            if link_speed is not None
-            else check_link_speed()
-        )
-        update_results(
-            {
-                "wifi_analysis": {
-                    "ssid":      current_network["ssid"],
-                    "channel":   current_network["channel"],
-                    "rssi":      current_network["rssi"],
-                    "bandwidth": current_network["bandwidth"],
-                    "link_speed": link_speed_str,
-                }
+    if current_network:
+        link_speed_str = current_network.get("link_speed_str") or check_link_speed()
+        update_results({
+            "wifi_analysis": {
+                "ssid":       current_network.get("ssid"),
+                "bssid":      current_network.get("bssid"),
+                "band":       current_network.get("band"),
+                "channel":    current_network.get("channel"),
+                "rssi":       current_network.get("rssi"),
+                "bandwidth":  current_network.get("bandwidth"),
+                "link_speed": link_speed_str,
+                "source":     current_network.get("source"),
             }
-        )
+        })
         print_wifi_analysis_results(channels, current_network)
     else:
-        print(
-            f"{Fore.RED}Unable to perform Wi-Fi analysis "
-            f"(needs Termux or Linux with nmcli).{Style.RESET_ALL}"
-        )
+        print(f"{Fore.RED}Unable to perform Wi-Fi analysis (needs Termux API + location permission).{Style.RESET_ALL}")
+        print("  Run:  termux-wifi-scaninfo  to verify scan is working.")
 
     # 6. Problem detection
     problems, tips = detect_network_problems(dl_mbps, ul_mbps, internet_avg, devices)
     print_analysis_results(problems, tips)
 
-    update_results(
-        {
-            "status": "complete",
-            "analysis": {"problems": problems, "tips": tips},
-        }
-    )
-    print(
-        f"\n{Fore.CYAN}Dashboard still running → "
-        f"http://127.0.0.1:8000/{Style.RESET_ALL}"
-    )
+    update_results({
+        "status": "complete",
+        "analysis": {"problems": problems, "tips": tips},
+    })
+
+    print(f"\n{Fore.CYAN}Dashboard still running → http://127.0.0.1:8000/{Style.RESET_ALL}")
     try:
         input("Press Enter to stop the local dashboard and exit...")
     except KeyboardInterrupt:
