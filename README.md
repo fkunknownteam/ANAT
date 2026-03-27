@@ -93,6 +93,9 @@ apt update && apt upgrade -y
 # Install required tools
 pkg install termux-api python git -y
 
+# install required tools
+pkg install traceroute
+
 # Grant location permission — Android will show a permission dialog, tap Allow
 termux-location
 
